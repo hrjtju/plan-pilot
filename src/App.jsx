@@ -38,160 +38,16 @@ import {
   pinnableTimeForTitle,
 } from "./planningSemantics.js";
 import { tryExtractJson } from "./jsonExtract.js";
-
-const APP_NAME = "计划引航";
-const APP_SHORT_NAME = "引航";
-const STORAGE_KEY = "personal-planning-coach-v1";
-const AI_KEY_STORAGE_KEY = "plan-pilot-ai-api-key-v1";
-
-const priorityOrder = { high: 3, medium: 2, low: 1 };
-const priorityLabel = { high: "高", medium: "中", low: "低" };
-const goalTypeLabel = { long: "长期", month: "月度", week: "本周" };
-const energyOptions = ["偏低", "正常", "充沛"];
-const energyColorMap = { 偏低: "#6b4d9a", 正常: "#2f6e9c", 充沛: "#2f7d55" };
-function energyColor(level) { return energyColorMap[level] || "#2f6e9c"; }
-const AI_PROVIDER_PRESETS = {
-  openai: {
-    label: "OpenAI",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.openai.com/v1",
-    model: "gpt-5.2",
-    note: "适合复杂规划与推理；也可改成 gpt-5-mini 等更轻模型。",
-  },
-  deepseek: {
-    label: "DeepSeek",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.deepseek.com",
-    model: "deepseek-v4-pro",
-    note: "DeepSeek 官方 OpenAI-compatible 接口。",
-  },
-  kimi: {
-    label: "Kimi / Moonshot",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.moonshot.ai/v1",
-    model: "kimi-k2.5",
-    note: "月之暗面 Kimi Open Platform，OpenAI-compatible。",
-  },
-  qwen: {
-    label: "通义千问 / DashScope",
-    protocol: "openai-compatible",
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    model: "qwen-plus",
-    note: "阿里云百炼/DashScope 兼容模式；国际站可改为 dashscope-intl 地址。",
-  },
-  glm: {
-    label: "智谱 GLM",
-    protocol: "openai-compatible",
-    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-    model: "glm-4.5",
-    note: "智谱 BigModel OpenAI-compatible 接口。",
-  },
-  doubao: {
-    label: "豆包 / 火山方舟",
-    protocol: "openai-compatible",
-    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
-    model: "",
-    note: "火山方舟兼容 OpenAI 调用，模型名通常填控制台里的 endpoint/model id。",
-  },
-  qianfan: {
-    label: "百度千帆 / 文心",
-    protocol: "openai-compatible",
-    baseUrl: "https://qianfan.baidubce.com/v2",
-    model: "ernie-4.5-turbo-128k",
-    note: "百度千帆兼容接口，模型名按控制台可用列表调整。",
-  },
-  gemini: {
-    label: "Google Gemini",
-    protocol: "openai-compatible",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    model: "gemini-2.5-flash",
-    note: "使用 Gemini 的 OpenAI-compatible endpoint。",
-  },
-  openrouter: {
-    label: "OpenRouter",
-    protocol: "openai-compatible",
-    baseUrl: "https://openrouter.ai/api/v1",
-    model: "openai/gpt-5.2",
-    note: "聚合路由，可把模型名改成 OpenRouter 控制台里的任意模型。",
-  },
-  siliconflow: {
-    label: "SiliconFlow",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.siliconflow.cn/v1",
-    model: "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    note: "硅基流动 OpenAI-compatible 接口，模型名按控制台可用列表调整。",
-  },
-  hunyuan: {
-    label: "腾讯混元",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
-    model: "hunyuan-turbos-latest",
-    note: "腾讯混元 OpenAI-compatible 接口，模型名按腾讯云控制台调整。",
-  },
-  mistral: {
-    label: "Mistral",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.mistral.ai/v1",
-    model: "mistral-large-latest",
-    note: "Mistral Chat Completions 接口。",
-  },
-  xai: {
-    label: "xAI / Grok",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.x.ai/v1",
-    model: "grok-4-latest",
-    note: "xAI OpenAI-compatible 接口。",
-  },
-  groq: {
-    label: "Groq",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.groq.com/openai/v1",
-    model: "llama-3.3-70b-versatile",
-    note: "Groq OpenAI-compatible 接口，适合试用高速开源模型。",
-  },
-  perplexity: {
-    label: "Perplexity",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.perplexity.ai",
-    model: "sonar-pro",
-    note: "Perplexity Sonar 接口，适合带联网检索能力的模型。",
-  },
-  minimax: {
-    label: "MiniMax",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.minimax.io/v1",
-    model: "MiniMax-M2.7",
-    note: "MiniMax OpenAI-compatible 接口。",
-  },
-  mimo: {
-    label: "MiMo",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.xiaomimimo.com/v1",
-    model: "mimo-v2-pro",
-    note: "MiMo OpenAI-compatible 接口；如账号侧模型名不同，可直接改。",
-  },
-  stepfun: {
-    label: "阶跃星辰 StepFun",
-    protocol: "openai-compatible",
-    baseUrl: "https://api.stepfun.ai/v1",
-    model: "step-3.5-flash",
-    note: "StepFun Chat Completions API。",
-  },
-  anthropic: {
-    label: "Claude / Opus",
-    protocol: "anthropic",
-    baseUrl: "https://api.anthropic.com",
-    model: "claude-opus-4-8",
-    note: "使用 Anthropic Messages API。",
-  },
-  custom: {
-    label: "自定义 OpenAI 兼容",
-    protocol: "openai-compatible",
-    baseUrl: "",
-    model: "",
-    note: "填写任何兼容 /chat/completions 的服务地址和模型名。",
-  },
-};
+import { APP_NAME, APP_SHORT_NAME, STORAGE_KEY, AI_KEY_STORAGE_KEY } from "./constants/appConstants.js";
+import { AI_PROVIDER_PRESETS, getAiProviderPreset } from "./constants/aiProviders.js";
+import {
+  priorityOrder,
+  priorityLabel,
+  goalTypeLabel,
+  energyOptions,
+  energyColorMap,
+  energyColor,
+} from "./constants/labels.js";
 
 const defaultState = {
   settings: {
@@ -1096,10 +952,11 @@ function extractActionTasksFromText(text, date, existingTasks = []) {
 }
 
 async function callPlanningAi({ ai, messages, maxTokens = 1800, json = true, serverKeyOk = false }) {
-  // 未配置 API Key 时直接抛错，避免触发 400 网络请求；若服务端已配置环境变量 Key 则放行
-  const effectiveKey = ai.apiKey || readLocalAiKey();
-  if (!effectiveKey && !serverKeyOk) {
-    throw new Error("未配置 AI API Key。请在设置中添加 Key 后重试。");
+  // 浏览器 + 服务端都没 Key 时直接抛错，避免触发 400 网络请求。
+  // serverKeyOk 由调用方根据 mount 时 /api/ai/status 的查询结果传入。
+  const apiKey = ai.apiKey || readLocalAiKey() || undefined;
+  if (!apiKey && !serverKeyOk) {
+    throw new Error("未配置 API Key。请在设置中添加浏览器 Key，或检查服务端环境变量（AI_API_KEY / DEEPSEEK_API_KEY / ANTHROPIC_API_KEY）。");
   }
   // 推理型模型（step-3.7-flash 等）会把 token 预算先花在「思考」(message.reasoning) 上，
   // 预算太小会在写正文前就被 finish_reason=length 截断、content 为空。
@@ -1115,7 +972,7 @@ async function callPlanningAi({ ai, messages, maxTokens = 1800, json = true, ser
         protocol: ai.protocol || "openai-compatible",
         baseUrl: ai.baseUrl,
         model: ai.model,
-        apiKey: ai.apiKey || readLocalAiKey() || undefined,
+        apiKey,
         messages: extra ? messages.concat(extra) : messages,
         max_tokens: effectiveMax,
         temperature: 0.2,
@@ -1252,42 +1109,39 @@ function sortBlocks(blocks) {
   return [...blocks].sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
 }
 
+// Greedy lane assignment for overlapping blocks. Each block gets a `_col`
+// (its lane index) and `_totalCols` (number of lanes in its overlap cluster)
+// so the timeline can render them side-by-side instead of stacking on top.
+//
+// Complexity: O(n log n) for the sort, O(n × max_overlap) for the sweep.
+// In practice max_overlap is bounded by daily schedule density (~3-5),
+// so this is effectively O(n). The naive alternative recomputing totalCols
+// per block via a full filter would be O(n²).
 function assignTimelineColumns(blocks) {
-  // Greedy lane assignment: assign overlapping blocks to different columns
-  // so they render side-by-side instead of stacking on top of each other.
-  // Uses shallow copies to avoid mutating planner state objects.
-  const copies = blocks.map((b) => ({ ...b }));
-  const sorted = copies.sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
-  const active = []; // blocks whose end time hasn't passed yet
+  const sorted = [...blocks]
+    .sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
+    .map((b) => ({ ...b }));
+  const active = []; // { block, endMin } — blocks still overlapping with current
 
   for (const block of sorted) {
-    // Remove blocks that have ended before this one starts
-    const stillActive = active.filter(
-      (b) => toMinutes(b.end) > toMinutes(block.start),
-    );
-    // Find the first free column
-    const usedCols = new Set(stillActive.map((b) => b._col));
+    const startMin = toMinutes(block.start);
+    // Drop blocks that ended before this one started.
+    for (let i = active.length - 1; i >= 0; i--) {
+      if (active[i].endMin <= startMin) active.splice(i, 1);
+    }
+    // Pick smallest free lane among currently-active blocks.
+    const usedCols = new Set(active.map((a) => a.block._col));
     let col = 0;
     while (usedCols.has(col)) col++;
     block._col = col;
-    stillActive.push(block);
-    active.length = 0;
-    active.push(...stillActive);
-  }
-
-  // Second pass: compute _totalCols for each block based on its overlap group
-  for (const block of sorted) {
-    const overlapping = sorted.filter(
-      (b) =>
-        b.id !== block.id &&
-        toMinutes(b.start) < toMinutes(block.end) &&
-        toMinutes(b.end) > toMinutes(block.start),
-    );
-    const maxCol = Math.max(
-      block._col,
-      ...overlapping.map((b) => b._col || 0),
-    );
-    block._totalCols = maxCol + 1;
+    // Compute shared totalCols = max lane index used by this block's cluster.
+    let maxCol = col;
+    for (const a of active) if (a.block._col > maxCol) maxCol = a.block._col;
+    const totalCols = maxCol + 1;
+    block._totalCols = totalCols;
+    // All active blocks share the same cluster → same totalCols.
+    for (const a of active) a.block._totalCols = totalCols;
+    active.push({ block, endMin: toMinutes(block.end) });
   }
 
   return sorted;
@@ -1354,7 +1208,48 @@ function polishAiBlocks(blocks, segments) {
     break; // only check last block
   }
 
-  return result;
+  // Safety net: even with the HARD BOUNDARY RULE in the prompt, AI may still
+  // emit blocks outside work segments (weak models, temperature drift, JSON
+  // truncation). Force-clamp start/end into the nearest segment and drop
+  // anything that collapses below 5 min — those are too short to render or
+  // interact with meaningfully.
+  return clampToSegments(result, segments);
+}
+
+// Force every block to lie strictly within one of `segments`. Blocks that
+// don't fit are clamped (start/end pulled into the nearest segment that
+// contains the midpoint); if a block has no overlap with any segment, it's
+// dropped. Blocks shorter than MIN_BLOCK_MIN after clamping are also dropped.
+function clampToSegments(blocks, segments) {
+  const MIN_BLOCK_MIN = 5;
+  if (!segments.length) return blocks.filter(() => false);
+  const segRanges = segments.map((s) => ({ start: toMinutes(s.start), end: toMinutes(s.end) }));
+
+  return blocks
+    .filter((b) => b && b.start && b.end)
+    .map((b) => {
+      const sMin = toMinutes(b.start);
+      const eMin = toMinutes(b.end);
+      if (eMin <= sMin) return { ...b, _drop: true };
+      // Find segment containing the block midpoint, or nearest one.
+      const mid = (sMin + eMin) / 2;
+      let seg = segRanges.find((s) => mid >= s.start && mid <= s.end);
+      if (!seg) {
+        // Pick nearest segment by midpoint distance.
+        let best = segRanges[0];
+        let bestDist = Math.abs(mid - (best.start + best.end) / 2);
+        for (const s of segRanges) {
+          const d = Math.abs(mid - (s.start + s.end) / 2);
+          if (d < bestDist) { best = s; bestDist = d; }
+        }
+        seg = best;
+      }
+      const newStart = Math.max(sMin, seg.start);
+      const newEnd = Math.min(eMin, seg.end);
+      const newDur = newEnd - newStart;
+      if (newDur < MIN_BLOCK_MIN) return { ...b, _drop: true };
+      return { ...b, start: toTime(newStart), end: toTime(newEnd) };
+    });
 }
 
 function workloadMinutes(settings) {
@@ -1979,7 +1874,7 @@ function App() {
       : activeView === "goals"
         ? "先选个目标，拆成更小的下一步。"
         : "今天做得如何？明天要做什么？";
-  const currentAiPreset = AI_PROVIDER_PRESETS[planner.ai.provider] || AI_PROVIDER_PRESETS.custom;
+  const currentAiPreset = getAiProviderPreset(planner.ai.provider);
   const aiKeyLoaded = Boolean(localAiKey.trim() || serverAiKeyLoaded);
 
   function patchPlanner(updater) {
@@ -2019,7 +1914,7 @@ function App() {
   }
 
   function applyAiProviderPreset(provider) {
-    const preset = AI_PROVIDER_PRESETS[provider] || AI_PROVIDER_PRESETS.custom;
+    const preset = getAiProviderPreset(provider);
     updateAiSettings({
       provider,
       protocol: preset.protocol,
@@ -3519,10 +3414,10 @@ function App() {
           <p>
             当前协议：{planner.ai.protocol === "anthropic" ? "Anthropic Messages" : "OpenAI 兼容"}。
             {serverAiKeyLoaded
-              ? "已检测到服务端环境变量（AI_API_KEY / DEEPSEEK_API_KEY / ANTHROPIC_API_KEY），Key 不会存储在浏览器或数据文件中。"
+              ? "已检测到服务端环境变量（AI_API_KEY / DEEPSEEK_API_KEY / ANTHROPIC_API_KEY），Key 不会持久化到服务器或数据文件中。如需改用浏览器 Key，清空环境变量后在上方输入框填写即可。"
               : localAiKey.trim()
-                ? "浏览器 Key 存储在本地 localStorage 中，仅本机可访问，不会上传到服务器。"
-                : "Key 可填写在上方输入框（存储在浏览器 localStorage），也可通过服务端环境变量（AI_API_KEY / DEEPSEEK_API_KEY / ANTHROPIC_API_KEY）或 .env 文件配置。"}
+                ? "浏览器 Key 存储在本地 localStorage，每次调用随请求临时传入本机代理，不会持久化到服务器或数据文件中。如需切换为服务端 Key，可配置环境变量（AI_API_KEY / DEEPSEEK_API_KEY / ANTHROPIC_API_KEY）或项目根目录 .env 文件，然后清空上方输入框。"
+                : "Key 可填写在上方输入框（存储在浏览器 localStorage），也可通过服务端环境变量（AI_API_KEY / DEEPSEEK_API_KEY / ANTHROPIC_API_KEY）或项目根目录 .env 文件配置。"}
           </p>
           {currentAiPreset.note && <p className="ai-provider-note">{currentAiPreset.note}</p>}
         </section>
@@ -3819,16 +3714,17 @@ function DayTimeline({ blocks, taskById, settings, selectedDate, onReschedule, o
         else if (task?.priority === "low") cls = "priority-low";
         const col = block._col ?? 0;
         const cols = block._totalCols ?? 1;
-        const blkStyle =
-          cols > 1
-            ? {
-                top,
-                height: h,
-                left: `calc(50px + (100% - 52px) * ${col / cols})`,
-                width: `calc((100% - 52px) / ${cols} - 2px)`,
-                right: "auto",
-              }
-            : { top, height: h };
+        // When overlapping, shift left/width so blocks render side-by-side.
+        // Single blocks keep the original full-width layout (right: 2px).
+        const blkStyle = cols > 1
+          ? {
+              top,
+              height: h,
+              left: `calc(50px + (100% - 52px) * ${col / cols})`,
+              width: `calc((100% - 52px) / ${cols} - 2px)`,
+              right: "auto",
+            }
+          : { top, height: h };
         return (
           <article
             className={`dt-blk dt-${cls}${isDragging ? " dragging" : ""}${task?.status === "done" ? " dt-done" : ""}`}
@@ -3838,7 +3734,11 @@ function DayTimeline({ blocks, taskById, settings, selectedDate, onReschedule, o
           >
             {!busy && block.taskId && task && onToggleDone && (
               <button
+                type="button"
                 className={`dt-check${task.status === "done" ? " is-done" : ""}`}
+                role="checkbox"
+                aria-checked={task.status === "done"}
+                aria-label={task.status === "done" ? "标记未完成" : "标记完成"}
                 title={task.status === "done" ? "标记未完成" : "标记完成"}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); onToggleDone(block); }}
@@ -4406,7 +4306,11 @@ function TodayView({
                 title="拖到右侧时间轴可安排到具体时间"
               >
                 <button
+                  type="button"
                   className={`check-button${task.status === "done" ? " is-done" : ""}`}
+                  role="checkbox"
+                  aria-checked={task.status === "done"}
+                  aria-label={task.status === "done" ? "标记未完成" : "标记完成"}
                   title={task.status === "done" ? "标记未完成" : "标记完成"}
                   onClick={() => updateTask(task.id, { status: task.status === "done" ? "open" : "done" })}
                 >
@@ -4928,11 +4832,12 @@ function buildGoalGantt(goals, tasks, todayStr) {
     visiting.add(goalId);
     const dates = [];
     (tasksByGoal[goalId] || []).forEach((t) => { if (/^\d{4}-\d{2}-\d{2}$/.test(t.date)) dates.push(t.date); });
-    // 收集目标的手动指定日期（如果用户设置了起止时间）
     const goalObj = goalMap[goalId];
-    if (goalObj?.startDate && /^\d{4}-\d{2}-\d{2}$/.test(goalObj.startDate)) dates.push(goalObj.startDate);
-    if (goalObj?.endDate && /^\d{4}-\d{2}-\d{2}$/.test(goalObj.endDate)) dates.push(goalObj.endDate);
-    const hasExplicit = !!(goalObj?.startDate || goalObj?.endDate);
+    const startDate = goalObj?.startDate && /^\d{4}-\d{2}-\d{2}$/.test(goalObj.startDate) ? goalObj.startDate : "";
+    const endDate = goalObj?.endDate && /^\d{4}-\d{2}-\d{2}$/.test(goalObj.endDate) ? goalObj.endDate : "";
+    if (startDate) dates.push(startDate);
+    if (endDate) dates.push(endDate);
+    const hasExplicit = !!(startDate || endDate);
     const childSpans = (childrenMap[goalId] || []).map((c) => spanOf(c.id, visiting)).filter(Boolean);
     const starts = dates.concat(childSpans.map((s) => s.start));
     const ends = dates.concat(childSpans.map((s) => s.end));
@@ -4942,6 +4847,9 @@ function buildGoalGantt(goals, tasks, todayStr) {
       let end = ends[0];
       starts.forEach((d) => { if (d < start) start = d; });
       ends.forEach((d) => { if (d > end) end = d; });
+      // 单边日期补另一边（保底 1 天宽度，避免 bar 塌缩成点）
+      if (startDate && !endDate) end = addDays(startDate, 1);
+      else if (endDate && !startDate) start = addDays(endDate, -1);
       const hasTasks = dates.length > 0 || childSpans.some((s) => s.derived === "tasks");
       info = { start, end, derived: hasExplicit ? "explicit" : hasTasks ? "tasks" : "type" };
     } else {
@@ -4978,17 +4886,24 @@ function buildGoalGantt(goals, tasks, todayStr) {
 function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
   const [editingGoalId, setEditingGoalId] = useState(null);
   const [editDraft, setEditDraft] = useState({ title: "", type: "long", priority: "medium", parentId: "", startDate: "", endDate: "" });
+  const [editError, setEditError] = useState("");
   const today = getLocalDate();
 
   function startEditingGoal(goal) {
     setEditingGoalId(goal.id);
     setEditDraft({ title: goal.title, type: goal.type, priority: goal.priority, parentId: goal.parentId || "", startDate: goal.startDate || "", endDate: goal.endDate || "" });
+    setEditError("");
   }
   function cancelEditingGoal() {
     setEditingGoalId(null);
+    setEditError("");
   }
   function saveEditingGoal(goalId) {
     if (!editDraft.title.trim()) return;
+    if (editDraft.startDate && editDraft.endDate && editDraft.startDate > editDraft.endDate) {
+      setEditError("结束日期不能早于开始日期");
+      return;
+    }
     updateGoal(goalId, {
       title: editDraft.title.trim(),
       type: editDraft.type,
@@ -4998,6 +4913,7 @@ function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
       endDate: editDraft.endDate || "",
     });
     setEditingGoalId(null);
+    setEditError("");
   }
   function handleStatusChange(goal, status) {
     if (status === "done") updateGoal(goal.id, { status: "done", progress: 100 });
@@ -5099,7 +5015,7 @@ function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
                         <input
                           type="date"
                           value={editDraft.startDate}
-                          onChange={(e) => setEditDraft((d) => ({ ...d, startDate: e.target.value }))}
+                          onChange={(e) => { setEditDraft((d) => ({ ...d, startDate: e.target.value })); setEditError(""); }}
                         />
                       </label>
                       <label>
@@ -5107,10 +5023,11 @@ function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
                         <input
                           type="date"
                           value={editDraft.endDate}
-                          onChange={(e) => setEditDraft((d) => ({ ...d, endDate: e.target.value }))}
+                          onChange={(e) => { setEditDraft((d) => ({ ...d, endDate: e.target.value })); setEditError(""); }}
                         />
                       </label>
                     </div>
+                    {editError && <div className="goal-edit-error">{editError}</div>}
                     <div className="goal-edit-actions">
                       <button className="secondary-action" onClick={() => saveEditingGoal(goal.id)}>保存</button>
                       <button className="secondary-action" onClick={cancelEditingGoal}>取消</button>
@@ -5164,7 +5081,7 @@ function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
                   ))}
                   {showToday && <span className="gantt-track-today" style={{ left: `${pct(today)}%` }} />}
                   <div
-                    className={`gantt-bar status-${goal.status} priority-${goal.priority}${span.derived === "type" ? " estimated" : ""}`}
+                    className={`gantt-bar status-${goal.status} priority-${goal.priority}${span.derived === "type" ? " estimated" : ""}${span.derived === "explicit" ? " explicit" : ""}`}
                     style={{ left: `${left}%`, width: `${width}%` }}
                     title={`${span.start} → ${span.end}（${span.derived === "explicit" ? "手动指定" : span.derived === "tasks" ? "按关联任务" : "按类型估算"}）`}
                   >

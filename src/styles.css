@@ -30,12 +30,13 @@
   --admin-soft: #e9eee8; --admin-bar: #7c917a; --admin-ink: #445540;
   --priority-high-soft: #fef0ee; --priority-high-bar: #c05e3e; --priority-high-ink: #8c2e24;
   --priority-medium-soft: #fdf6e5; --priority-medium-bar: #d99f1a; --priority-medium-ink: #735a15;
-  --priority-low-soft: #edf3ef; --priority-low-bar: #7c917a; --priority-low-ink: #445540;
+  --priority-low-soft: #ece8e0; --priority-low-bar: #a89c84; --priority-low-ink: #5a4e3a;
   --radius: 14px;
   --radius-sm: 10px;
   --shadow-sm: 0 1px 2px rgba(38, 33, 24, 0.04), 0 1px 3px rgba(38, 33, 24, 0.05);
   --shadow-md: 0 6px 20px rgba(38, 33, 24, 0.07);
   --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent); /* 跟随 accent 自动变色 */
+  --dt-actions-width: 54px; /* 编辑/删除按钮 hover 时占的宽度，dt-body padding-right 同步 */
 }
 
 * {
@@ -913,7 +914,6 @@ textarea {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
-  overflow: hidden;
 }
 
 .metric {
@@ -1887,6 +1887,12 @@ textarea {
   gap: 10px;
 }
 
+.goal-edit-error {
+  font-size: 12px;
+  color: var(--danger, #b83b2c);
+  padding: 4px 0;
+}
+
 .goal-edit-actions {
   display: flex;
   align-items: center;
@@ -2210,6 +2216,8 @@ textarea:focus-visible {
 
 .dt-blk {
   position: absolute; left: 50px; right: 2px;
+  /* justify-content/gap removed: .dt-actions is now position: absolute
+     (top-right) so dt-blk only needs flex for dt-body + dt-resize layering. */
   display: flex; align-items: flex-start;
   border-radius: 10px; padding: 8px 12px; overflow: hidden; z-index: 2; transition: box-shadow .12s;
   cursor: grab; touch-action: none; user-select: none;
@@ -2221,13 +2229,20 @@ textarea:focus-visible {
 .dt-blk:hover .dt-resize::after { opacity: .4; }
 .dt-body { min-width: 0; position: relative; z-index: 1; padding-right: 0; transition: padding-right .12s; }
 .dt-blk:has(.dt-check) .dt-body { padding-left: 22px; }
-.dt-blk:hover .dt-body { padding-right: 54px; }
+.dt-blk:hover .dt-body { padding-right: var(--dt-actions-width); }
 .dt-bt { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dt-bm { font-size: 11.5px; opacity: .85; margin-top: 2px; }
 .dt-check { position: absolute; left: 4px; top: 4px; z-index: 4; display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 4px; background: rgba(255,255,255,.65); color: var(--text-muted); cursor: pointer; opacity: 0; transition: opacity .12s; padding: 0; }
 .dt-blk:hover .dt-check { opacity: 1; }
 .dt-check.is-done { opacity: 1; color: #2f7d55; }
-.dt-actions { display: flex; gap: 2px; position: absolute; right: 8px; top: 8px; z-index: 4; opacity: 0; transition: opacity .12s; pointer-events: none; }
+.dt-actions {
+  /* absolute top-right so overlapping blocks (PR #16) can share horizontal space
+     via per-block left/width from _col/_totalCols. pointer-events: none keeps
+     the block draggable underneath; :hover on .dt-blk enables clicks. */
+  display: flex; gap: 2px; position: absolute; right: 8px; top: 8px; z-index: 4;
+  min-width: var(--dt-actions-width); justify-content: flex-end;
+  opacity: 0; transition: opacity .12s; pointer-events: none;
+}
 .dt-blk:hover .dt-actions { opacity: 1; pointer-events: auto; }
 .dt-blk.dt-done { opacity: 0.65; }
 .dt-blk.dt-done .dt-bt { text-decoration: line-through; }
@@ -2302,7 +2317,7 @@ html[data-theme="graphite"] {
   --admin-soft: #eef1f5; --admin-bar: #6b7689; --admin-ink: #3c4554;
   --priority-high-soft: #fdf0ef; --priority-high-bar: #c0533f; --priority-high-ink: #7a2e25;
   --priority-medium-soft: #fdf8ed; --priority-medium-bar: #b58a36; --priority-medium-ink: #6b4d17;
-  --priority-low-soft: #edf1f0; --priority-low-bar: #6b7689; --priority-low-ink: #3c4554;
+  --priority-low-soft: #e8e4dc; --priority-low-bar: #8a7d6e; --priority-low-ink: #4a4030;
 }
 
 /* —— 目标甘特图 —— */
@@ -2344,6 +2359,7 @@ html[data-theme="graphite"] {
 .gantt-track-today { position: absolute; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--accent) 50%, transparent); }
 .gantt-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 24px; min-width: 8px; border-radius: 7px; background: var(--accent-soft); border: 1.5px solid var(--accent); display: flex; align-items: center; overflow: hidden; }
 .gantt-bar.estimated { border-style: dashed; opacity: 0.85; }
+.gantt-bar.explicit { border-style: double; border-width: 4px; }
 .gantt-bar.priority-high { border-color: var(--danger); }
 .gantt-bar.priority-medium { border-color: var(--pending); }
 .gantt-bar.priority-low { border-color: var(--faint); }
