@@ -15,7 +15,7 @@ npm run build        # 生产构建
 npm run preview      # 预览生产构建
 ```
 
-没有测试、lint 或类型检查脚本。
+测试用 node:test：`npm test`。没有 lint 或类型检查脚本。
 
 ## 技术架构
 
