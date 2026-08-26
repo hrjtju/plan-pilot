@@ -1,6 +1,6 @@
-import { CheckCircle2, ListTodo, Plus, Wand2 } from "lucide-react";
+import { CheckCircle2, ListTodo, Plus, Send, Sparkles, Wand2, X } from "lucide-react";
 import { formatHumanDate } from "../utils/dateTime.js";
-import { priorityOrder, priorityLabel, goalTypeLabel } from "../constants/labels.js";
+import { priorityOrder, priorityLabel, goalTypeLabel, goalStatusLabel } from "../constants/labels.js";
 import { EmptyState } from "../components/EmptyState.jsx";
 import { GoalGantt } from "../components/gantt/GoalGantt.jsx";
 
@@ -21,7 +21,23 @@ export function GoalsView({
   aiStatus,
   goalById,
   deleteGoal,
+  goalCoach,
+  setGoalCoach,
+  startGoalCoach,
+  sendGoalCoachMessage,
+  applyGoalCoachChanges,
 }) {
+  function updatePatchSummary(patch, goalMap) {
+    const parts = [];
+    if (patch.title) parts.push(`标题 → 「${patch.title}」`);
+    if (patch.type) parts.push(`类型 → ${goalTypeLabel[patch.type]}`);
+    if (patch.priority) parts.push(`优先级 → ${priorityLabel[patch.priority]}`);
+    if (patch.status) parts.push(`状态 → ${goalStatusLabel[patch.status]}`);
+    if (patch.progress !== undefined) parts.push(`进度 → ${patch.progress}%`);
+    if (patch.parentId !== undefined) parts.push(`上级 → ${goalMap[patch.parentId]?.title || "无"}`);
+    return parts.join(" · ");
+  }
+
   const parentOptions = goals.filter((goal) => {
     if (goalDraft.type === "long") return false;
     if (goalDraft.type === "month") return goal.type === "long";
@@ -152,6 +168,100 @@ export function GoalsView({
             </button>
           </div>
         )}
+      </section>
+
+      <section className="panel goal-coach-panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">目标调整对话</p>
+            <h2>用对话微调已有目标</h2>
+          </div>
+        </div>
+
+        <div className="interview-body">
+          {goalCoach.messages.length === 0 && !goalCoach.loading && (
+            <EmptyState
+              icon={<Sparkles size={22} />}
+              text="点「开始调整」→ 告诉 AI 想改什么（标题 / 优先级 / 状态 / 层级 / 删除）；出现修改卡片后点「应用修改」生效。"
+            />
+          )}
+          {(goalCoach.messages.length > 0 || goalCoach.loading) && (
+            <div className="chat-scroll">
+              <div className="interview-messages">
+                {goalCoach.messages.map((message, index) => (
+                  <div className={`chat-row ${message.role}`} key={`${message.role}-${index}`}>
+                    {message.role === "assistant" && (
+                      <span className="chat-avatar"><Sparkles size={13} /></span>
+                    )}
+                    <article className={`interview-message ${message.role}`}>{message.content}</article>
+                  </div>
+                ))}
+                {goalCoach.loading && (
+                  <div className="chat-row assistant">
+                    <span className="chat-avatar"><Sparkles size={13} /></span>
+                    <div className="chat-typing" aria-label="AI 正在输入">
+                      <i /><i /><i />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {goalCoach.error && <div className="ai-error block">{goalCoach.error}</div>}
+
+          {goalCoach.ops && (
+            <div className="coach-suggestions">
+              <p className="coach-suggestions-caption">AI 提议的修改 · 确认后点「应用修改」</p>
+              {goalCoach.ops.updates.map((item) => (
+                <article className="coach-suggestion" key={`update-${item.goalId}`}>
+                  <strong>{goalById[item.goalId]?.title || item.goalId}</strong>
+                  <span>
+                    {updatePatchSummary(item.patch, goalById)}
+                  </span>
+                </article>
+              ))}
+              {goalCoach.ops.deletes.map((item) => (
+                <article className="coach-suggestion is-delete" key={`delete-${item.goalId}`}>
+                  <strong>{goalById[item.goalId]?.title || item.goalId}</strong>
+                  <span>删除（子目标会上移一层）</span>
+                </article>
+              ))}
+              <div className="interview-actions">
+                <button className="primary-action" onClick={applyGoalCoachChanges}>
+                  <CheckCircle2 size={18} />
+                  应用修改
+                </button>
+                <button
+                  type="button"
+                  className="secondary-action"
+                  onClick={() => setGoalCoach((coach) => ({ ...coach, ops: null }))}
+                >
+                  <X size={18} />
+                  忽略这批
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <form className="interview-form" onSubmit={sendGoalCoachMessage}>
+          <textarea
+            value={goalCoach.input}
+            onChange={(event) => setGoalCoach((coach) => ({ ...coach, input: event.target.value }))}
+            placeholder="例如：把“论文实验”改成高优先级；周报已经写完了；删掉“学吉他”"
+          />
+          <div className="interview-actions">
+            <button className="primary-action" disabled={goalCoach.loading || !goalCoach.input.trim()}>
+              <Send size={18} />
+              发送
+            </button>
+            <button type="button" className="secondary-action" onClick={startGoalCoach} disabled={goalCoach.loading}>
+              <Sparkles size={18} />
+              {goalCoach.loading ? "AI 思考中" : "开始调整"}
+            </button>
+          </div>
+        </form>
       </section>
 
       <section className="panel future-task-panel">

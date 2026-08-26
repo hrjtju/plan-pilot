@@ -1,6 +1,7 @@
 export const priorityOrder = { high: 3, medium: 2, low: 1 };
 export const priorityLabel = { high: "高", medium: "中", low: "低" };
 export const goalTypeLabel = { long: "长期", month: "月度", week: "本周" };
+export const goalStatusLabel = { active: "进行中", paused: "已暂停", done: "已完成" };
 export const energyOptions = ["偏低", "正常", "充沛"];
 export const energyColorMap = { 偏低: "#6b4d9a", 正常: "#2f6e9c", 充沛: "#2f7d55" };
 

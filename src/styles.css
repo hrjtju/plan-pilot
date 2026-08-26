@@ -1241,6 +1241,17 @@ button.topbar-highlight:hover {
   font-size: 13px;
 }
 
+.coach-suggestion.is-delete {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
+}
+.coach-suggestion.is-delete strong::after {
+  content: "（删除）";
+  color: var(--danger);
+  font-size: 0.85em;
+  margin-left: 6px;
+}
+
 .interview-form {
   display: grid;
   gap: 10px;
