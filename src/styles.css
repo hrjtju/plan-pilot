@@ -1750,7 +1750,7 @@ button.topbar-highlight:hover {
 
 .future-divider {
   padding: 8px 0 4px;
-  color: var(--faint);
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1863,7 +1863,7 @@ button.topbar-highlight:hover {
 
 .priority-badge.low {
   background: color-mix(in srgb, var(--text-muted) 7%, transparent);
-  color: var(--faint);
+  color: var(--text-muted);
 }
 
 .priority-badge.low::before {
@@ -1994,7 +1994,7 @@ button.topbar-highlight:hover {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: var(--faint);
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
 }
@@ -2276,7 +2276,7 @@ input[type="time"],
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: var(--faint);
+  color: var(--text-muted);
   cursor: pointer;
 }
 
@@ -2612,14 +2612,16 @@ textarea:focus-visible {
 .dt-editbar .dt-edit-title { flex: 1; min-width: 120px; }
 .btn-text { border: 0; background: transparent; color: var(--accent); font-weight: 600; font-size: 13px; padding: 4px 8px; cursor: pointer; }
 
-/* 全天 00:00–24:00 较高，容器内部滚动（自动定位到「现在」），避免页面被一根 24 小时长条撑爆 */
+/* 渲染范围 = 工作时段首尾（可能不足 24 小时），内容驱动高度：
+   短时段完整显示不拉伸留白，超长时段（如 07:00–23:00）内部滚动 */
 .day-timeline {
-  position: relative; margin-top: 6px; flex: 1 1 0%; min-height: 300px; overflow-y: auto; scrollbar-gutter: stable;
+  position: relative; margin-top: 6px; flex: 0 1 auto; min-height: 300px; max-height: 620px;
+  overflow-y: auto; scrollbar-gutter: stable;
 }
 .dt-hour { position: absolute; left: 0; right: 0; border-top: 1px solid var(--hair); }
 .dt-hour span {
   position: relative; top: -8px; left: 4px; background: var(--surface); padding-right: 6px;
-  color: var(--faint); font-size: 11.5px; font-variant-numeric: tabular-nums;
+  color: var(--text-muted); font-size: 11.5px; font-variant-numeric: tabular-nums;
 }
 /* 半小时虚线刻度 */
 .dt-half {
@@ -2833,7 +2835,7 @@ html[data-theme="night"] {
 .gantt-axis { background: var(--surface-2); border-bottom: 1px solid var(--border); }
 .gantt-axis-spacer { border-right: 1px solid var(--border); }
 .gantt-axis-track { position: relative; height: 30px; }
-.gantt-tick { position: absolute; top: 9px; transform: translateX(-50%); font-size: 10.5px; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gantt-tick { position: absolute; top: 9px; transform: translateX(-50%); font-size: 10.5px; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .gantt-axis-today { position: absolute; top: 9px; transform: translateX(-50%); font-size: 10.5px; font-weight: 700; color: var(--accent); white-space: nowrap; }
 
 .gantt-row { border-bottom: 1px solid var(--hair); }
@@ -2973,7 +2975,7 @@ html[data-theme="night"] {
 .pip-close {
   display: grid; place-items: center; width: 22px; height: 22px;
   border: 0; border-radius: 6px; background: transparent;
-  color: var(--faint); cursor: pointer;
+  color: var(--text-muted); cursor: pointer;
 }
 .pip-close:hover { color: var(--text); background: var(--surface-2); }
 .pip-title {
@@ -2998,7 +3000,7 @@ html[data-theme="night"] {
   font-size: 12px; font-weight: 700; cursor: pointer;
 }
 .pip-done:hover { background: var(--accent-hover); }
-.pip-empty { color: var(--faint); font-size: 12px; margin: auto; }
+.pip-empty { color: var(--text-muted); font-size: 12px; margin: auto; }
 
 /* ===== 主动问候卡 ===== */
 .today-wrap {
@@ -3032,6 +3034,6 @@ html[data-theme="night"] {
 .greet-dismiss:hover { color: var(--text); background: var(--surface-2); }
 .greet-mute {
   border: 0; background: transparent; cursor: pointer;
-  color: var(--faint); font-size: 12px; padding: 0 6px;
+  color: var(--text-muted); font-size: 12px; padding: 0 6px;
 }
 .greet-mute:hover { color: var(--text-muted); }
