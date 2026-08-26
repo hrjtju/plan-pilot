@@ -41,6 +41,10 @@ export function DayTimeline({ blocks, taskById, settings, selectedDate, onResche
     };
   }, [drag?.id, drag?.mode]);
 
+  // 渲染范围 = 工作时段首尾（时段外有时间块时向外扩展，见 computeTimelineRange）。
+  // 小时刻度对齐整点（dayStart 非整点时从下一个整点起标）。
+  const { dayStart, dayEnd } = computeTimelineRange(segs, blocks);
+
   // 渲染范围为工作时段首尾（可能不足 24 小时）、容器内部滚动；切换日期/进入时自动定位到「现在」
   // （非今天则定位到首个块/工作开始），让关注点上方留约 1 小时。scrollTop 相对内容顶部，
   // 内容顶部对应第 dayStart 分钟，因此定位需减去 dayStart。
@@ -62,9 +66,6 @@ export function DayTimeline({ blocks, taskById, settings, selectedDate, onResche
   if (!hasContent) {
     return <EmptyState icon={<Clock3 size={22} />} text="还没有时间块。先在设置里配置工作时段，或在上面加任务后点自动安排。" />;
   }
-  // 渲染范围 = 工作时段首尾（时段外有时间块时向外扩展，见 computeTimelineRange）。
-  // 小时刻度对齐整点（dayStart 非整点时从下一个整点起标）。
-  const { dayStart, dayEnd } = computeTimelineRange(segs, blocks);
   const totalMin = dayEnd - dayStart;
   const hours = [];
   for (let m = Math.ceil(dayStart / 60) * 60; m < dayEnd; m += 60) hours.push(m);
