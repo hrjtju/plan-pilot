@@ -256,7 +256,7 @@ export function GoalsView({
               <Send size={18} />
               发送
             </button>
-            <button type="button" className="secondary-action" onClick={startGoalCoach} disabled={goalCoach.loading}>
+            <button type="button" className="secondary-action" onClick={startGoalCoach} disabled={goalCoach.loading || goalCoach.messages.length > 0}>
               <Sparkles size={18} />
               {goalCoach.loading ? "AI 思考中" : "开始调整"}
             </button>

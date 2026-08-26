@@ -1516,6 +1516,10 @@ function App() {
                 priority,
                 progress,
               })),
+              pendingOps: {
+                updates: goalCoach.ops?.updates?.map((u) => ({ goalId: u.goalId, patch: u.patch })) || [],
+                deletes: goalCoach.ops?.deletes?.map((d) => ({ goalId: d.goalId })) || [],
+              },
             }),
           },
           ...nextMessages.map((message) => ({ role: message.role, content: message.content })),

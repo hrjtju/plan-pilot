@@ -45,9 +45,16 @@ export function normalizeGoalOps(actions, goals) {
     if (GOAL_TYPES.includes(action.goalType)) patch.type = action.goalType;
     if (["high", "medium", "low"].includes(action.priority)) patch.priority = action.priority;
     if (GOAL_STATUSES.includes(action.status)) patch.status = action.status;
-    const progress = Number(action.progress);
-    if (Number.isFinite(progress)) patch.progress = Math.max(0, Math.min(100, Math.round(progress)));
-    if (action.parentRef !== undefined) patch.parentId = resolveGoalRef(goalList, action.parentRef);
+    if (action.progress != null && action.progress !== "") {
+      const progress = Number(action.progress);
+      if (Number.isFinite(progress)) patch.progress = Math.max(0, Math.min(100, Math.round(progress)));
+    }
+    if (action.parentRef !== undefined) {
+      // 只有解析到真实上级、或显式空字符串（明确挂顶层）才写 parentId；
+      // 非空但解析失败的 parentRef 整体丢弃，避免误挂顶层。
+      const parentId = resolveGoalRef(goalList, action.parentRef);
+      if (parentId || String(action.parentRef).trim() === "") patch.parentId = parentId;
+    }
     if (Object.keys(patch).length === 0) continue;
 
     const existing = updates.find((item) => item.goalId === goalId);
@@ -84,8 +91,10 @@ export function applyGoalOps(goals, ops) {
   }
 
   const updateById = new Map((ops?.updates || []).map((item) => [item.goalId, item.patch]));
-  if (updateById.size === 0) return next;
-  return next.map((goal) => (updateById.has(goal.id) ? { ...goal, ...updateById.get(goal.id) } : goal));
+  const updated = next.map((goal) => (updateById.has(goal.id) ? { ...goal, ...updateById.get(goal.id) } : goal));
+  // parentId 指向已不存在目标的（如被 UI 提前删除），重置为顶层，避免悬空引用
+  const idSet = new Set(updated.map((goal) => goal.id));
+  return updated.map((goal) => (goal.parentId && !idSet.has(goal.parentId) ? { ...goal, parentId: "" } : goal));
 }
 
 export function goalOpsSummaryText(ops) {

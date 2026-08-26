@@ -103,3 +103,19 @@ test("goalOpsSummaryText：中文摘要", () => {
   assert.match(goalOpsSummaryText({ updates: [{ goalId: "a", patch: {} }], deletes: [{ goalId: "b" }] }), /修改 1 个目标、删除 1 个目标/);
   assert.match(goalOpsSummaryText({ updates: [], deletes: [] }), /没有需要应用的修改/);
 });
+
+test("applyGoalOps：patch 的 parentId 指向已不存在的目标时重置为顶层", () => {
+  const goals = sampleGoals();
+  const next = applyGoalOps(goals, { updates: [{ goalId: "g3", patch: { parentId: "ghost" } }], deletes: [] });
+  assert.equal(next.find((g) => g.id === "g3").parentId, "");
+});
+
+test("normalizeGoalOps：无法解析的非空 parentRef 丢弃该字段，不误挂顶层", () => {
+  const ops = normalizeGoalOps([{ type: "update_goal", goalRef: "g2", parentRef: "不存在的上级", priority: "low" }], sampleGoals());
+  assert.deepEqual(ops.updates, [{ goalId: "g2", patch: { priority: "low" } }]);
+});
+
+test("normalizeGoalOps：progress 为 null 或空字符串时不产生进度变更", () => {
+  const ops = normalizeGoalOps([{ type: "update_goal", goalRef: "g1", progress: null }], sampleGoals());
+  assert.equal(ops.updates.length, 0);
+});

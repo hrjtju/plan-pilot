@@ -104,7 +104,7 @@ export function DayTimeline({ blocks, taskById, settings, selectedDate, onResche
     <div
       className="day-timeline"
       ref={rootRef}
-      style={{}} // height determined by flex layout; inner spacer keeps 24h canvas
+      style={{}} // height determined by flex layout; inner spacer keeps the work-range canvas
       onDragOver={onDragOverTimeline}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDropMin(null); }}
       onDrop={onDropTimeline}
