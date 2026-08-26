@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { CheckSquare, Clock3, Pencil, Play, Square, Trash2 } from "lucide-react";
 import { getLocalDate, toMinutes, toTime } from "../../utils/dateTime.js";
 import { isMeetingSentence } from "../../planningSemantics.js";
+import { computeTimelineRange } from "../../planner/scheduling.js";
 import { EmptyState } from "../../components/EmptyState.jsx";
 
 export function DayTimeline({ blocks, taskById, settings, selectedDate, onReschedule, onDropTask, onEdit, onDelete, onToggleDone, onStartFocus }) {
@@ -60,13 +61,12 @@ export function DayTimeline({ blocks, taskById, settings, selectedDate, onResche
   if (!hasContent) {
     return <EmptyState icon={<Clock3 size={22} />} text="还没有时间块。先在设置里配置工作时段，或在上面加任务后点自动安排。" />;
   }
-  // 固定显示完整一天 00:00–24:00：小时标签 0–23（最后一格 23:00），容器高度铺到 24:00，
-  // 这样「现在」线在任何时刻（含 23:xx）都落在范围内、不会越出底部看不见。
-  const dayStart = 0;
-  const dayEnd = 1440;
+  // 渲染范围 = 工作时段首尾（时段外有时间块时向外扩展，见 computeTimelineRange）。
+  // 小时刻度对齐整点（dayStart 非整点时从下一个整点起标）。
+  const { dayStart, dayEnd } = computeTimelineRange(segs, blocks);
   const totalMin = dayEnd - dayStart;
   const hours = [];
-  for (let m = dayStart; m < dayEnd; m += 60) hours.push(m);
+  for (let m = Math.ceil(dayStart / 60) * 60; m < dayEnd; m += 60) hours.push(m);
   const nowDate = new Date();
   const nowMin = selectedDate === getLocalDate() ? nowDate.getHours() * 60 + nowDate.getMinutes() : null;
 
