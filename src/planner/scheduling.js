@@ -691,3 +691,30 @@ export function buildAutoBlocks({ tasks, existingBlocks, settings, selectedDate,
     questions,
   };
 }
+
+// 时间轴渲染范围：默认 = 工作时段首尾；时段外仍有时间块（如晚间固定安排）时
+// 向外扩展到包含它，避免内容被裁掉。全空时退回 08:00–22:00。
+export function computeTimelineRange(segs, blocks) {
+  const segmentList = Array.isArray(segs) ? segs : [];
+  const blockList = Array.isArray(blocks) ? blocks : [];
+  const segStarts = segmentList.map((seg) => toMinutes(seg.start));
+  const segEnds = segmentList.map((seg) => toMinutes(seg.end));
+  const blockStarts = blockList.map((block) => toMinutes(block.start));
+  const blockEnds = blockList.map((block) => toMinutes(block.end));
+  let start = segStarts.length
+    ? Math.min(...segStarts)
+    : blockStarts.length
+      ? Math.min(...blockStarts)
+      : 8 * 60;
+  let end = segEnds.length
+    ? Math.max(...segEnds)
+    : blockEnds.length
+      ? Math.max(...blockEnds)
+      : 22 * 60;
+  if (segStarts.length && blockStarts.length) {
+    start = Math.max(0, Math.min(start, Math.min(...blockStarts)));
+    end = Math.min(1440, Math.max(end, Math.max(...blockEnds)));
+  }
+  if (end <= start) end = Math.min(1440, start + 60);
+  return { dayStart: start, dayEnd: end };
+}

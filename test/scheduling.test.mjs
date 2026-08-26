@@ -4,6 +4,7 @@ import {
   getFreeIntervals,
   buildAutoBlocks,
   findSlotForTask,
+  computeTimelineRange,
 } from "../src/planner/scheduling.js";
 
 const today = "2026-08-26";
@@ -114,4 +115,48 @@ test("findSlotForTask：无 notBefore 时不限制", () => {
     today,
   );
   assert.equal(slot.start, "09:00");
+});
+
+test("computeTimelineRange：范围 = 工作时段首尾", () => {
+  const segs = [{ start: "09:00", end: "12:00" }, { start: "14:00", end: "18:00" }];
+  const range = computeTimelineRange(segs, []);
+  assert.equal(range.dayStart, 540);
+  assert.equal(range.dayEnd, 1080);
+});
+
+test("computeTimelineRange：时段外时间块向外扩展范围", () => {
+  const segs = [{ start: "09:00", end: "12:00" }, { start: "14:00", end: "18:00" }];
+  const blocks = [
+    { start: "07:30", end: "08:30" },
+    { start: "19:00", end: "20:00" },
+  ];
+  const range = computeTimelineRange(segs, blocks);
+  assert.equal(range.dayStart, 450);
+  assert.equal(range.dayEnd, 1200);
+});
+
+test("computeTimelineRange：时段内时间块不改变范围", () => {
+  const segs = [{ start: "09:00", end: "12:00" }, { start: "14:00", end: "18:00" }];
+  const blocks = [{ start: "10:00", end: "11:00" }];
+  const range = computeTimelineRange(segs, blocks);
+  assert.equal(range.dayStart, 540);
+  assert.equal(range.dayEnd, 1080);
+});
+
+test("computeTimelineRange：无时段时按时间块，全空给默认 08:00–22:00", () => {
+  const byBlocks = computeTimelineRange([], [{ start: "10:00", end: "12:00" }]);
+  assert.equal(byBlocks.dayStart, 600);
+  assert.equal(byBlocks.dayEnd, 720);
+  const fallback = computeTimelineRange([], []);
+  assert.equal(fallback.dayStart, 480);
+  assert.equal(fallback.dayEnd, 1320);
+});
+
+test("computeTimelineRange：夹在 0–1440 且不产生空范围", () => {
+  const clamped = computeTimelineRange([], [{ start: "00:00", end: "23:59" }]);
+  assert.equal(clamped.dayStart, 0);
+  assert.equal(clamped.dayEnd, 1439);
+  const inverted = computeTimelineRange([{ start: "09:00", end: "09:00" }], []);
+  assert.equal(inverted.dayStart, 540);
+  assert.equal(inverted.dayEnd, 600);
 });
