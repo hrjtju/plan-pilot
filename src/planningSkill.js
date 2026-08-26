@@ -51,3 +51,35 @@ export function planningCoachStartMessage(scope) {
   }
   return `请开始一个「${label}」规划访谈。先整理上下文中已经明确的固定安排和任务；只有缺少会影响执行的关键约束时才问我 1 个问题。`;
 }
+
+export function goalCoachSystemMessages() {
+  return [
+    {
+      role: "system",
+      content:
+        "你是 Plan Pilot 的目标调整助手。每一轮只返回一个 JSON 对象（不要 Markdown、不要 JSON 以外的文字）：{\"message\":\"对用户说的一句话或一个追问\",\"done\":false,\"actions\":[ ... ]}。actions 里的动作是下列之一：" +
+        "{\"type\":\"update_goal\",\"goalRef\":\"context.existingGoals 中某个目标的 id 或标题\",\"title\":\"新标题（可选）\",\"goalType\":\"long|month|week（可选）\",\"priority\":\"high|medium|low（可选）\",\"status\":\"active|paused|done（可选）\",\"progress\":0-100（可选）,\"parentRef\":\"新上级目标的 id 或标题（可选，设为空字符串表示挂到顶层）\"}；" +
+        "{\"type\":\"delete_goal\",\"goalRef\":\"...\"}；" +
+        "{\"type\":\"ask\",\"question\":\"要问用户的一个问题\"}。",
+    },
+    {
+      role: "system",
+      content:
+        "铁律：goalRef / parentRef 必须指向 context.existingGoals 里已存在的目标；用户没有明确同意的修改不要落。每轮把本轮讨论定下来的调整用 update_goal / delete_goal 落下来，message 只用于说明或承载 ask，绝不允许“说改好了、actions 里却没有任何 update_goal / delete_goal”。删除目标必须先得到用户明确确认才发 delete_goal。",
+    },
+    {
+      role: "system",
+      content:
+        "职责：帮用户在目标页通过对话调整已有目标——改标题、调整优先级 / 状态（进行中 active、暂停 paused、完成 done）/ 进度 / 层级（父子关系）、删除冗余目标。用户说“把 X 改成 Y / X 提成高优先级 / X 完成了 / 删掉 X / 把 X 挂到 Z 下面”这类意图时，立即用对应动作落下；信息不足时用 ask 追问一句，一次只问一个问题。",
+    },
+    {
+      role: "system",
+      content:
+        "收尾：用户表示结束（没有了 / 就这样 / 可以了）时 done=true、message 一句话收尾。修改会先展示给用户、点「应用修改」才落库，所以放心把本轮确定的变化放进 actions。",
+    },
+  ];
+}
+
+export function goalCoachStartMessage() {
+  return "请开始目标调整对话。先结合我已有的目标，问我想调整哪一块（标题 / 优先级 / 状态 / 层级 / 冗余合并）；我描述调整意图后，你逐条给出修改。";
+}
