@@ -8,10 +8,13 @@ import {
   Target,
 } from "lucide-react";
 import {
+  goalCoachStartMessage,
+  goalCoachSystemMessages,
   planningCoachStartMessage,
   planningCoachSystemMessages,
   TODAY_GUIDE_SYSTEM_PROMPT,
 } from "./planningSkill.js";
+import { applyGoalOps, goalOpsSummaryText, normalizeGoalOps } from "./planner/goalOps.js";
 import {
   normalizeSentence,
   isBusySentence,
@@ -149,6 +152,14 @@ function App() {
     draft: emptyDraft(), // 跨轮累积的计划草稿（喂给模型作 draftSummary 去重提示；step 4 起驱动 UI）
     loading: false,
     error: "",
+  });
+  // 目标页的 AI 调整对话：messages 为聊天记录，ops 为待确认的修改（点「应用修改」才落库）
+  const [goalCoach, setGoalCoach] = useState({
+    messages: [],
+    input: "",
+    loading: false,
+    error: "",
+    ops: null,
   });
   const [reviewDraft, setReviewDraft] = useState({
     completed: "",
@@ -1472,6 +1483,83 @@ function App() {
     }));
   }
 
+  async function runGoalCoach(nextMessages) {
+    if (!planner.ai.enabled) {
+      setGoalCoach((coach) => ({
+        ...coach,
+        loading: false,
+        error: "请先在设置里启用 AI（点左侧齿轮）。",
+        messages: nextMessages,
+      }));
+      return;
+    }
+
+    setGoalCoach((coach) => ({ ...coach, loading: true, error: "", messages: nextMessages }));
+    try {
+      const result = await callPlanningAi({
+        ai: planner.ai,
+        apiKey: localAiKey,
+        serverKeyOk: serverAiKeyLoaded,
+        maxTokens: 1200,
+        messages: [
+          ...goalCoachSystemMessages(),
+          {
+            role: "user",
+            content: JSON.stringify({
+              today: selectedDate,
+              existingGoals: planner.goals.map(({ id, title, type, parentId, status, priority, progress }) => ({
+                id,
+                title,
+                type,
+                parentId,
+                status,
+                priority,
+                progress,
+              })),
+            }),
+          },
+          ...nextMessages.map((message) => ({ role: message.role, content: message.content })),
+        ],
+      });
+
+      const ops = normalizeGoalOps(result?.actions, planner.goals);
+      setGoalCoach((coach) => ({
+        ...coach,
+        loading: false,
+        error: "",
+        messages: nextMessages.concat({ role: "assistant", content: coachMessageFrom(result) || "我看过你的目标了，想调整哪一块？" }),
+        ops: ops.updates.length || ops.deletes.length ? ops : null,
+      }));
+    } catch (error) {
+      setGoalCoach((coach) => ({ ...coach, loading: false, error: error.message || "AI 目标调整失败。" }));
+    }
+  }
+
+  function startGoalCoach() {
+    if (goalCoach.messages.length || goalCoach.loading) return; // 对话进行中不重复开场
+    runGoalCoach([{ role: "user", content: goalCoachStartMessage() }]);
+  }
+
+  function sendGoalCoachMessage(event) {
+    event.preventDefault();
+    const content = goalCoach.input.trim();
+    if (!content || goalCoach.loading) return;
+    const nextMessages = goalCoach.messages.concat({ role: "user", content });
+    setGoalCoach((coach) => ({ ...coach, input: "" }));
+    runGoalCoach(nextMessages);
+  }
+
+  function applyGoalCoachChanges() {
+    const ops = goalCoach.ops;
+    if (!ops || (!ops.updates.length && !ops.deletes.length)) return;
+    patchPlanner((current) => ({ goals: applyGoalOps(current.goals, ops) }));
+    setGoalCoach((coach) => ({
+      ...coach,
+      ops: null,
+      messages: coach.messages.concat({ role: "assistant", content: goalOpsSummaryText(ops) }),
+    }));
+  }
+
   function exportData() {
     const exportPlanner = JSON.parse(JSON.stringify(planner));
     if (exportPlanner.ai) delete exportPlanner.ai.apiKey;
@@ -1834,6 +1922,11 @@ function App() {
             acceptBreakdown={acceptBreakdown}
             aiStatus={aiStatus}
             goalById={goalById}
+            goalCoach={goalCoach}
+            setGoalCoach={setGoalCoach}
+            startGoalCoach={startGoalCoach}
+            sendGoalCoachMessage={sendGoalCoachMessage}
+            applyGoalCoachChanges={applyGoalCoachChanges}
           />
         )}
 
