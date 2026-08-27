@@ -36,6 +36,7 @@ import { WelcomeCard } from "./components/WelcomeCard.jsx";
 import { THEMES } from "./utils/commandParse.js";
 import { playTick } from "./utils/soundFx.js";
 import { useLocalAiKey } from "./hooks/useLocalAiKey.js";
+import { useLocalVoiceKey } from "./hooks/useLocalVoiceKey.js";
 import { hydratePlannerState, usePlannerStore } from "./hooks/usePlannerStore.js";
 import { uid } from "./utils/ids.js";
 import {
@@ -107,6 +108,7 @@ function App() {
   });
   const autoSchedulingRef = useRef(false); // 防自动安排并发（每实例，替代模块全局）—— from PR #6 (hrjtju)
   const [localAiKey, updateLocalAiKey] = useLocalAiKey();
+  const [voiceKey, updateVoiceKey] = useLocalVoiceKey(); // 语音 ASR 独立 Key（聊天 Key 之外的回落链：voiceKey → localAiKey → 服务器环境变量）
   const [serverAiKeyLoaded, setServerAiKeyLoaded] = useState(false);
   const [syncWarningDismissed, setSyncWarningDismissed] = useState(false); // 文件同步不可用提示的关闭状态
   const [activeView, setActiveView] = useState("today");
@@ -1502,7 +1504,12 @@ function App() {
 
   function sendPlanningCoachMessage(event) {
     event.preventDefault();
-    const content = planningCoach.input.trim();
+    sendPlanningCoachText(planningCoach.input);
+  }
+
+  // 显式文本版本：语音自动发送等场景不经过输入框 state
+  function sendPlanningCoachText(text) {
+    const content = String(text || "").trim();
     if (!content || planningCoach.loading) return;
     const nextMessages = planningCoach.messages.concat({ role: "user", content });
     setPlanningCoach((coach) => ({ ...coach, input: "" }));
@@ -1920,6 +1927,8 @@ function App() {
         applyAiProviderPreset={applyAiProviderPreset}
         localAiKey={localAiKey}
         updateLocalAiKey={updateLocalAiKey}
+        voiceKey={voiceKey}
+        updateVoiceKey={updateVoiceKey}
         serverAiKeyLoaded={serverAiKeyLoaded}
         aiKeyLoaded={aiKeyLoaded}
         currentAiPreset={currentAiPreset}
@@ -2054,6 +2063,7 @@ function App() {
             setPlanningCoach={setPlanningCoach}
             startPlanningCoach={startPlanningCoach}
             sendPlanningCoachMessage={sendPlanningCoachMessage}
+            sendPlanningCoachText={sendPlanningCoachText}
             acceptPlanningCoachSuggestions={acceptPlanningCoachSuggestions}
             showAiFollowUp={showAiFollowUp}
             todayAiReply={todayAiReply}
@@ -2063,6 +2073,7 @@ function App() {
             onStartFocus={startFocus}
             ai={planner.ai}
             localAiKey={localAiKey}
+            voiceKey={voiceKey}
             serverAiKeyLoaded={serverAiKeyLoaded}
           />
         )}
@@ -2128,6 +2139,11 @@ function App() {
           selectedDate={selectedDate}
           todayStr={getLocalDate()}
           defaults={commandDefaults}
+          voiceEngine={planner.settings.voiceEngine || "stepfun"}
+          voiceApiKey={voiceKey || localAiKey}
+          voiceBaseUrl={planner.settings.voiceAsrBaseUrl || ""}
+          voiceModel={planner.settings.voiceAsrModel || ""}
+          voiceAutoSend={planner.settings.voiceAutoSend !== false}
         />
 
         {showWelcome && (
