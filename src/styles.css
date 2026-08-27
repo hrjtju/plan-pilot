@@ -2915,6 +2915,7 @@ html[data-theme="night"] {
 
 .gantt-row { border-bottom: 1px solid var(--hair); }
 .gantt-row:last-child { border-bottom: 0; }
+.gantt-divider { height: 0; border-top: 3px solid var(--border-strong); } /* 顶级目标分组分隔线 */
 .gantt-row.is-editing { display: block; padding: 14px; background: var(--surface-2); }
 
 .gantt-label { padding: 8px 10px; border-right: 1px solid var(--border); display: grid; gap: 5px; align-content: center; min-width: 0; overflow: hidden; }

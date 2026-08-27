@@ -129,6 +129,7 @@ async function axisTickTexts(page) {
     check("A1: 两行 bar 渲染", ganttTop.bars === 2, `bars=${ganttTop.bars}`);
     check("A2: 刻度存在", ganttTop.ticks >= 2, `ticks=${ganttTop.ticks}`);
     check("A3: 仅显式日期的 bar 可拖", ganttTop.movableBars === 1, `movable=${ganttTop.movableBars}`);
+    check("A5: 两个顶级目标之间有一条分隔线", await page.locator(".gantt-divider").count() === 1, `dividers=${await page.locator(".gantt-divider").count()}`);
 
     // 记录 fit 模式下第一个 bar 的几何（用于缩放回归对照）
     const fitBarBox = await page.evaluate(() => {
@@ -377,6 +378,8 @@ async function axisTickTexts(page) {
     check("G2: 中优先级条背景 = --priority-medium-soft", colors.medium === colors.expMedium && colors.medium !== null, `${colors.medium}`);
     check("G3: 低优先级条背景 = --priority-low-soft", colors.low === colors.expLow && colors.low !== null, `${colors.low}`);
     check("G4: 三档优先级颜色可区分", new Set([colors.high, colors.medium, colors.low]).size === 3, JSON.stringify(colors));
+    const dividers = await page.locator(".gantt-divider").count();
+    check("G5: 三个顶级目标之间有两条分隔线", dividers === 2, `dividers=${dividers}`);
     await ctx.close();
   }
 

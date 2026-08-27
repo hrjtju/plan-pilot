@@ -1,8 +1,8 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback, Fragment } from "react";
 import { Pencil, Trash2, ZoomIn, ZoomOut, Scan } from "lucide-react";
 import { addDays, dayDiff, formatShortDate, getLocalDate } from "../../utils/dateTime.js";
 import { goalTypeLabel } from "../../constants/labels.js";
-import { buildGoalGantt } from "../../planner/gantt.js";
+import { buildGoalGantt, dividerBeforeIndexes } from "../../planner/gantt.js";
 import { clampResizeDelta } from "../../planner/ganttBarResize.js";
 import { EmptyState } from "../../components/EmptyState.jsx";
 import {
@@ -306,12 +306,16 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
           </div>
         </div>
         <div className="gantt-rows">
-          {rows.map(({ goal, depth, span, prog }) => {
+          {(() => {
+            const dividerBefore = new Set(dividerBeforeIndexes(rows));
+            return rows.map(({ goal, depth, span, prog }, rowIndex) => {
             const progress = prog.value;
             const progressLocked = prog.auto || goal.status === "done";
             if (editingGoalId === goal.id) {
               return (
-                <div className="gantt-row is-editing" key={goal.id}>
+                <Fragment key={goal.id}>
+                  {dividerBefore.has(rowIndex) && <div className="gantt-divider" role="presentation" />}
+                  <div className="gantt-row is-editing">
                   <div className="goal-edit-form">
                     <input
                       value={editDraft.title}
@@ -375,11 +379,14 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
                       <button className="secondary-action" onClick={cancelEditingGoal}>取消</button>
                     </div>
                   </div>
-                </div>
+                  </div>
+                </Fragment>
               );
             }
             return (
-              <div className="gantt-row" key={goal.id}>
+              <Fragment key={goal.id}>
+                {dividerBefore.has(rowIndex) && <div className="gantt-divider" role="presentation" />}
+                <div className="gantt-row">
                 <div className="gantt-label" style={{ paddingLeft: 10 + depth * 14 }}>
                   <div className="gantt-label-top">
                     <span className={`gantt-dot ${goal.type}`} title={goalTypeLabel[goal.type]} />
@@ -462,8 +469,10 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
                   })()}
                 </div>
               </div>
+              </Fragment>
             );
-          })}
+            });
+          })()}
         </div>
       </div>
     </section>

@@ -98,3 +98,13 @@ export function buildGoalGantt(goals, tasks, todayStr) {
   if (min === null) { min = todayStr; max = addDays(todayStr, 28); }
   return { rows, min: addDays(min, -2), max: addDays(max, 2) };
 }
+
+// 顶级目标（depth=0）之间的粗水平分隔线：返回应在其前渲染分隔线的行下标；首个顶级目标前不插。
+// 孤儿目标也被 place 为 depth 0，因此同样参与分组。
+export function dividerBeforeIndexes(rows) {
+  const out = [];
+  rows.forEach((r, i) => {
+    if (i > 0 && r && r.depth === 0) out.push(i);
+  });
+  return out;
+}

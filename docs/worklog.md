@@ -49,3 +49,17 @@
 
 **问题与发现**：
 1. 纯 CSS 改动没有渲染层单测基建，选了「computed style vs CSS 变量解析值」的 e2e 断言路线，比硬编码 rgb 期望值更耐主题调整；静态文件检查只作为存在性防回归，不能证明视觉正确，两类测试的分工在注释中明确标注。
+
+### 功能 D：顶级目标之间的粗水平分隔线
+
+**动机**：目标有层级（长期/月度/本周嵌套），但视觉上顶级目标之间的分组边界不明显，多条子目标排在一起难以快速切分组。
+
+**实现**：
+- `src/planner/gantt.js` 新增 `dividerBeforeIndexes(rows)` 纯函数：返回应在其前渲染分隔线的行下标（depth===0 且非首行；孤儿目标也被 place 为 depth 0，同样参与分组）。
+- `GoalGantt.jsx`：rows 渲染改为 `Fragment` 包裹，命中分隔位置的行前插入 `<div className="gantt-divider">`；编辑表单行与普通行两个 return 分支均包裹。
+- CSS：`.gantt-divider { height: 0; border-top: 3px solid var(--border-strong); }`。
+
+**验证**：新增 `test/ganttDivider.test.mjs` 4 组用例（混合层级/首行不插/相邻顶级/无顶级与空表，127 全绿）；e2e 场景 A 补 A5（2 顶级 → 1 线）、场景 G 补 G5（3 顶级 → 2 线），全部通过。
+
+**问题与发现**：
+1. 给 rows.map 加 Fragment 时先改了箭头体为表达式位置再插入 JS 语句，中间态文件语法损坏；Vite HMR 报「export 丢失」+ 页面白屏。教训：改 JSX 循环结构应一次性把「回调体形态（块体/表达式体）、闭合符、key 位置」三件事想全再动手，不要留中间态。本次修复时发现编辑分支与正常分支的 return 都要各自包 Fragment，divider 才能在「编辑中的顶级行」前也正确出现。
