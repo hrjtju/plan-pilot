@@ -7,14 +7,24 @@ import { computeTimelineRange } from "../../planner/scheduling.js";
 import { EmptyState } from "../../components/EmptyState.jsx";
 import { edgeScrollSpeed, clampScroll, findScrollableAncestor } from "./autoScroll.js";
 
-export function DayTimeline({ blocks, taskById, settings, selectedDate, onReschedule, onDropTask, onEdit, onDelete, onToggleDone, onStartFocus, dragTask }) {
-  const PXH = 56; // 每小时像素
-  const ppm = PXH / 60;
+export function DayTimeline({ blocks, taskById, settings, selectedDate, onReschedule, onDropTask, onEdit, onDelete, onToggleDone, onStartFocus, dragTask, fitAll = false }) {
+  const PXH_STD = 56; // 标准密度：每小时像素
   const segs = settings.workSegments || [];
   const hasContent = segs.length > 0 || blocks.length > 0; // 是否有可显示内容（否则给空态提示）
   const [drag, setDrag] = useState(null); // { id, mode:"move"|"resize", startY, origStart, origEnd, deltaMin }
   const rootRef = useRef(null); // 容器，用于把落点 clientY 换算成分钟
   const [dropMin, setDropMin] = useState(null); // 外部任务拖入时的落点指示（分钟）
+  const [viewH, setViewH] = useState(0); // fitAll 模式下的面板可视高度
+
+  // 适配全天：监听面板高度，内容范围（工作时段+块 ±30min）一屏放下
+  useEffect(() => {
+    if (!fitAll || !rootRef.current) return undefined;
+    const ro = new ResizeObserver((entries) => {
+      setViewH(entries[0]?.contentRect.height || 0);
+    });
+    ro.observe(rootRef.current);
+    return () => ro.disconnect();
+  }, [fitAll]);
 
   // —— 拖拽自动跟随滚动 ——
   // 场景：页面滚到底部拖外部任务时看不到时间轴；或拖到时间轴内想落的时段不在可视区。
@@ -114,14 +124,32 @@ export function DayTimeline({ blocks, taskById, settings, selectedDate, onResche
     };
   }, [drag?.id, drag?.mode]);
 
-  // 渲染范围 = 工作时段首尾（时段外有时间块时向外扩展，见 computeTimelineRange）。
-  // 小时刻度对齐整点（dayStart 非整点时从下一个整点起标）。
-  const { dayStart, dayEnd } = computeTimelineRange(segs, blocks);
+  // —— 密度与渲染范围 ——
+  // 标准模式：56px/h；渲染范围 = 工作时段首尾（时段外有时间块时向外扩展，见 computeTimelineRange），
+  // 容器内部滚动；切换日期/进入时自动定位到「现在」（非今天则首个块/工作开始），关注点上方留约 1 小时。
+  // fitAll 模式（适配全天）：范围收窄到「当日内容（工作时段+块）±30 分钟」，每小时像素按面板高度
+  // 动态计算（下限 26px/h 保证可读、上限 1.4× 标准避免半天日程被放得过大），全天一屏放下、无需定位。
+  let { dayStart, dayEnd } = computeTimelineRange(segs, blocks);
+  let pxh = PXH_STD;
+  if (fitAll) {
+    const pad = 30;
+    const pts = [];
+    segs.forEach((s) => { pts.push(toMinutes(s.start), toMinutes(s.end)); });
+    blocks.forEach((b) => { pts.push(toMinutes(b.start), toMinutes(b.end)); });
+    const lo = pts.length ? Math.min(...pts) : 7 * 60;
+    const hi = pts.length ? Math.max(...pts) : 23 * 60;
+    dayStart = Math.max(0, Math.floor((lo - pad) / 30) * 30);
+    dayEnd = Math.min(1440, Math.ceil((hi + pad) / 30) * 30);
+    if (viewH > 0) {
+      pxh = Math.max(26, Math.min(PXH_STD * 1.4, (viewH - 16) / ((dayEnd - dayStart) / 60)));
+    }
+  }
+  const ppm = pxh / 60;
 
-  // 渲染范围为工作时段首尾（可能不足 24 小时）、容器内部滚动；切换日期/进入时自动定位到「现在」
-  // （非今天则定位到首个块/工作开始），让关注点上方留约 1 小时。scrollTop 相对内容顶部，
+  // 定位到「现在」：仅标准模式需要（fitAll 全天可见）；scrollTop 相对内容顶部，
   // 内容顶部对应第 dayStart 分钟，因此定位需减去 dayStart。
   useEffect(() => {
+    if (fitAll) return;
     const el = rootRef.current;
     if (!el) return;
     const now = new Date();
@@ -134,7 +162,7 @@ export function DayTimeline({ blocks, taskById, settings, selectedDate, onResche
             ? toMinutes(segs[0].start)
             : 8 * 60;
     el.scrollTop = Math.max(0, (focusMin - dayStart - 60) * ppm);
-  }, [selectedDate, dayStart]);
+  }, [selectedDate, dayStart, fitAll]);
 
   // 外部任务卡 HTML5 拖拽生命周期跟踪（window 级）：只认本应用任务卡发起的拖拽；
   // dragover 持续喂入指针位置驱动自动滚动探测，drop/dragend 兜底收尾（浏览器取消、Esc、丢出窗口都会触发）。
@@ -164,15 +192,11 @@ export function DayTimeline({ blocks, taskById, settings, selectedDate, onResche
       finishHtmlDrag();
       window.removeEventListener("dragstart", onDragStart);
       window.removeEventListener("dragover", onWindowDragOver);
-      window.removeEventListener("drop", finishHtmlDrag);
       window.removeEventListener("dragend", finishHtmlDrag);
+      window.removeEventListener("drop", finishHtmlDrag);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (!hasContent) {
-    return <EmptyState illustration="calendar" text="还没有时间块。先在设置里配置工作时段，或在上面加任务后点自动安排。" />;
-  }
+  }, [])
   const totalMin = dayEnd - dayStart;
   const hours = [];
   for (let m = Math.ceil(dayStart / 60) * 60; m < dayEnd; m += 60) hours.push(m);
