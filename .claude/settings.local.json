@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr *)",
+      "PowerShell(npm run *)",
+      "Bash(gh issue *)",
+      "Bash(git fetch *)",
+      "Bash(git merge *)",
+      "Bash(git push *)",
+      "Bash(npm run *)",
+      "PowerShell(git fetch *)",
+      "PowerShell(git merge *)",
+      "PowerShell(foreach \\($b in @\\('feat/ai-auto-split','feat/gantt-editable-dates','feat/overlapping-timeline-blocks','feat/priority-colors','feat/timeline-completion-checkbox','fix/ai-server-env-key','fix/layout-viewport','fix/settings-key-text','backup/merge-upstream-20250605'\\)\\) { $ahead = \\(git rev-list --count fix/misc-polish..$b 2>$null\\); if \\($ahead -gt 0\\) { Write-Host \"$b : +$ahead unique commits\" } else { Write-Host \"$b : already merged \\(0\\)\" } })",
+      "PowerShell(git rebase *)",
+      "PowerShell(git *)",
+      "Bash(npx playwright *)",
+      "Bash(curl -sf http://127.0.0.1:5173)",
+      "Bash(npm list *)",
+      "Bash(npm root *)",
+      "Bash(NODE_PATH=\"C:/Users/Ivy/AppData/Roaming/npm/node_modules\" node *)",
+      "Bash(cp /tmp/verify-collapse.mjs \"C:/Users/Ivy/AppData/Roaming/npm/node_modules/verify-collapse.mjs\")",
+      "Bash(node verify-collapse.mjs)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 30400)",
+      "Bash(taskkill //F //PID 46588)",
+      "Bash(taskkill //F //PID 31164)",
+      "Bash(taskkill //F //PID 28100)"
+    ]
+  }
+}

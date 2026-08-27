@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
-import { CheckSquare, Clock3, Pencil, Play, Square, Trash2 } from "lucide-react";
+import { CheckSquare, Pencil, Play, Square, Trash2 } from "lucide-react";
 import { getLocalDate, toMinutes, toTime } from "../../utils/dateTime.js";
 import { isMeetingSentence } from "../../planningSemantics.js";
+import { estimateMinutesForTitle } from "../../planner/textExtract.js";
 import { computeTimelineRange } from "../../planner/scheduling.js";
 import { EmptyState } from "../../components/EmptyState.jsx";
 import { edgeScrollSpeed, clampScroll, findScrollableAncestor } from "./autoScroll.js";
 
-export function DayTimeline({ blocks, taskById, settings, selectedDate, onReschedule, onDropTask, onEdit, onDelete, onToggleDone, onStartFocus }) {
+export function DayTimeline({ blocks, taskById, settings, selectedDate, onReschedule, onDropTask, onEdit, onDelete, onToggleDone, onStartFocus, dragTask }) {
   const PXH = 56; // 每小时像素
   const ppm = PXH / 60;
   const segs = settings.workSegments || [];
@@ -169,13 +170,32 @@ export function DayTimeline({ blocks, taskById, settings, selectedDate, onResche
   }, []);
 
   if (!hasContent) {
-    return <EmptyState icon={<Clock3 size={22} />} text="还没有时间块。先在设置里配置工作时段，或在上面加任务后点自动安排。" />;
+    return <EmptyState illustration="calendar" text="还没有时间块。先在设置里配置工作时段，或在上面加任务后点自动安排。" />;
   }
   const totalMin = dayEnd - dayStart;
   const hours = [];
   for (let m = Math.ceil(dayStart / 60) * 60; m < dayEnd; m += 60) hours.push(m);
   const nowDate = new Date();
   const nowMin = selectedDate === getLocalDate() ? nowDate.getHours() * 60 + nowDate.getMinutes() : null;
+
+  // 外部任务拖入的「幽灵块」：实时预览落下后的样子——5 分钟吸附、
+  // 时长取该任务已有块或估时；压到不可用/固定块上时变红提示。
+  let ghost = null;
+  if (dropMin != null && dragTask) {
+    const existing = blocks.find((b) => b.taskId === dragTask.id && b.type !== "busy");
+    const dur = existing
+      ? toMinutes(existing.end) - toMinutes(existing.start)
+      : Math.max(10, estimateMinutesForTitle(dragTask.title, Number(dragTask.estimateMinutes) || 30));
+    const gStart = Math.max(dayStart, Math.min(dropMin, dayEnd - dur));
+    const gEnd = gStart + dur;
+    const clash = blocks.some((b) => {
+      if (b.id === existing?.id) return false;
+      if (!(b.type === "busy" || b.fixedTime)) return false;
+      return toMinutes(b.start) < gEnd && gStart < toMinutes(b.end);
+    });
+    ghost = { start: gStart, end: gEnd, dur, clash, title: dragTask.title };
+  }
+
 
   function startDrag(e, block, mode) {
     if (e.button !== undefined && e.button !== 0) return;
@@ -332,8 +352,14 @@ export function DayTimeline({ blocks, taskById, settings, selectedDate, onResche
         </div>
       )}
       {dropMin != null && (
-        <div className="dt-drop" style={{ top: (dropMin - dayStart) * ppm + 8 }}>
-          <b>放到 {toTime(dropMin)}</b>
+        <div
+          className={`dt-ghost${ghost.clash ? " clash" : ""}`}
+          style={{ top: (ghost.start - dayStart) * ppm + 8, height: Math.max(24, ghost.dur * ppm) }}
+        >
+          <span className="dt-ghost-title">{ghost.title}</span>
+          <span className="dt-ghost-time">
+            {ghost.clash ? "与固定安排冲突" : `${toTime(ghost.start)}–${toTime(ghost.end)}`}
+          </span>
         </div>
       )}
       <div className="dt-spacer" style={{ height: totalMin * ppm + 18, pointerEvents: "none" }} />

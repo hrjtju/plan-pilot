@@ -1,4 +1,4 @@
-import { CheckCircle2, ListTodo, Plus, Send, Sparkles, Wand2, X } from "lucide-react";
+import { CheckCircle2, Plus, Send, Sparkles, Wand2, X } from "lucide-react";
 import { formatHumanDate } from "../utils/dateTime.js";
 import { priorityOrder, priorityLabel, goalTypeLabel, goalStatusLabel } from "../constants/labels.js";
 import { EmptyState } from "../components/EmptyState.jsx";
@@ -288,7 +288,7 @@ export function GoalsView({
             })}
           </div>
         ) : (
-          <EmptyState icon={<ListTodo size={22} />} text="还没有今天之外的后续任务。" />
+          <EmptyState illustration="flag" text="还没有今天之外的后续任务。" />
         )}
       </section>
 
