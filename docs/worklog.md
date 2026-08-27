@@ -6,6 +6,12 @@
 
 本节按四个功能分四步推进，每步独立 commit（单测 + e2e 验证后提交）。
 
+**总结与反思**：
+- 四个 commit：`feat(gantt): wheel pans view by default...` / `feat(gantt): drag bar edges to resize...` / `feat(gantt): color bars by goal priority...` / `feat(gantt): thick divider between top-level goal groups`。
+- 单测从 112 → 127 全绿；e2e-gantt 从 14 → 30 项断言全过；纯逻辑全部下沉到 planner 纯函数（panWindow / clampResizeDelta / dividerBeforeIndexes），组件只负责事件编排与预览 CSS 变量，与既有「时间轴拖拽」架构风格一致。
+- **最大的一次返工来自一个自己的低级错误**（evaluate 传参解构不匹配）引发的连环排查：一开始把「合成 wheel 无效」错怪到 Chrome 的 Shift+滚轮转换和 React 渲染耗时上，先后做了事件属性诊断、target 命中诊断、probe listener、rAF 调度四个实验才定位。虽然 rAF 调度最终证明仍是有价值的安全加固（真实用户场景下同样存在 Chromium wheel 可取消性超时风险），但正确顺序应该是：先最小化复现 + 逐层断言（dispatch 后立即查 `defaultPrevented`），再谈机制猜想。
+- **遗留观察项**（不阻塞）：① Vite dev server 长时间编辑后模块缓存可能卡坏，需 touch 恢复，若频发应升级 Vite 或在 startup 脚本加 `--force` 备选；② CDP 合成 wheel 的默认滚动不受 preventDefault 控制，以后凡涉及「滚轮阻止页面滚动」的 e2e 断言一律走 dispatchEvent 路径；③ 甘特条 hover 提示文案已更新为「拖动平移/拖边缘调整」，但移动端（触屏）未验证边缘手柄的命中热区，后续真机过一遍。
+
 ### 功能 A：滚轮语义分离——默认平移，Ctrl/Shift 才缩放
 
 **动机**：原先滚轮落在甘特图上即缩放时间刻度，用户失去「扫视时间线」的自然手段。
