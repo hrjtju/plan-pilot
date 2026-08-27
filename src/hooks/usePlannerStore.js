@@ -22,6 +22,10 @@ export function hydratePlannerState(input, mergeTasks) {
 }
 
 // 只负责 planner 持久化：localStorage 启动、文件同步，以及加载后的数据压缩
+// 文件同步失败会在 UI 亮出提示（App 的 sync-warning 条），让“服务没起”不再静默。
+const SYNC_ISSUE_TEXT =
+  "本地文件同步失败：检测不到本地服务（请运行 npm run dev 或 startup.bat）。数据暂存于浏览器，AI 功能与文件同步不可用。";
+
 export function usePlannerStore({ compactPlannerTasks, mergeTasks }) {
   const [state, setState] = useState(() => {
     try {
@@ -32,34 +36,64 @@ export function usePlannerStore({ compactPlannerTasks, mergeTasks }) {
     }
   });
   const [loaded, setLoaded] = useState(false);
+  const [syncIssue, setSyncIssue] = useState(null); // null=正常；非 null=文件同步不可达
   const saveTimer = useRef(null);
 
   useEffect(() => {
-    fetch("/api/data")
-      .then((response) => response.json())
-      .then((fileData) => {
-        if (!fileData || fileData.error) return;
+    let cancelled = false;
+    let attempts = 0;
 
-        if (hasPlannerContent(fileData)) {
-          // 文件数据存在时优先使用文件，再把恢复后的结构同步回 localStorage。
-          const merged = hydratePlannerState(fileData, mergeTasks);
-          setState(merged);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-          return;
-        }
+    // 服务可能在启动中（startup.bat 最多等 60s）：首次加载失败后短暂重试几次，再亮出提示
+    function load() {
+      fetch("/api/data")
+        .then((response) => response.json())
+        .then((fileData) => {
+          if (cancelled) return;
+          if (!fileData || fileData.error) {
+            throw new Error(fileData?.error || "Empty response");
+          }
+          setSyncIssue(null); // 文件服务可达，恢复同步健康
 
-        // 文件存储为空时，用已有 localStorage 初始化文件，避免首次升级时清空本地数据。
-        const localRaw = localStorage.getItem(STORAGE_KEY);
-        if (localRaw) {
-          fetch("/api/data", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: localRaw,
-          }).catch(() => {});
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoaded(true));
+          if (hasPlannerContent(fileData)) {
+            // 文件数据存在时优先使用文件，再把恢复后的结构同步回 localStorage。
+            const merged = hydratePlannerState(fileData, mergeTasks);
+            setState(merged);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+            return;
+          }
+
+          // 文件存储为空时，用已有 localStorage 初始化文件，避免首次升级时清空本地数据。
+          const localRaw = localStorage.getItem(STORAGE_KEY);
+          if (localRaw) {
+            fetch("/api/data", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: localRaw,
+            })
+              .then((response) => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                setSyncIssue(null);
+              })
+              .catch(() => setSyncIssue(SYNC_ISSUE_TEXT));
+          }
+        })
+        .catch(() => {
+          if (cancelled) return;
+          attempts += 1;
+          if (attempts >= 3) {
+            setSyncIssue(SYNC_ISSUE_TEXT);
+          } else {
+            setTimeout(load, 3000);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoaded(true);
+        });
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [mergeTasks]);
 
   useEffect(() => {
@@ -90,10 +124,15 @@ export function usePlannerStore({ compactPlannerTasks, mergeTasks }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(state),
-      }).catch(() => {});
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          setSyncIssue(null); // 保存成功即恢复健康（服务可能已重新拉起）
+        })
+        .catch(() => setSyncIssue(SYNC_ISSUE_TEXT));
     }, 2000);
     return () => clearTimeout(saveTimer.current);
   }, [state, loaded]);
 
-  return [state, setState];
+  return [state, setState, syncIssue];
 }

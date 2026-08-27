@@ -29,22 +29,35 @@ export async function callPlanningAi({
 
   // 单次调用：jsonMode=是否启用严格 json_object（弱模型常因此返回空）；extra=追加的纠正消息
   async function once(jsonMode, extra) {
-    const response = await fetchImpl("/api/ai/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        provider: ai.provider,
-        protocol: ai.protocol || "openai-compatible",
-        baseUrl: ai.baseUrl,
-        model: ai.model,
-        apiKey,
-        messages: extra ? messages.concat(extra) : messages,
-        max_tokens: effectiveMax,
-        temperature: 0.2,
-        ...(jsonMode && json ? { response_format: { type: "json_object" } } : {}),
-        ...(ai.provider === "deepseek" ? { thinking: { type: "disabled" } } : {}),
-      }),
-    });
+    let response;
+    try {
+      response = await fetchImpl("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: ai.provider,
+          protocol: ai.protocol || "openai-compatible",
+          baseUrl: ai.baseUrl,
+          model: ai.model,
+          apiKey,
+          messages: extra ? messages.concat(extra) : messages,
+          max_tokens: effectiveMax,
+          temperature: 0.2,
+          ...(jsonMode && json ? { response_format: { type: "json_object" } } : {}),
+          ...(ai.provider === "deepseek" ? { thinking: { type: "disabled" } } : {}),
+        }),
+      });
+    } catch (error) {
+      // 浏览器网络层失败（TypeError: Failed to fetch）：请求从未到达本地 API 代理——
+      // 是 dev server 未运行 / 正在重启 / 被防火墙或代理拦截，不是 AI 上游返回的错误。
+      // 重试无意义，直接转成可行动的提示，避免误导性的“可换更稳的模型”建议。
+      const wrapped = new Error(
+        "本地 API 代理不可达：dev server 未运行或正在重启，请先启动服务（npm run dev 或 startup.bat）再试。",
+      );
+      wrapped.fatal = true;
+      wrapped.cause = error;
+      throw wrapped;
+    }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       // HTTP 层错误（Key 无效 401 / 模型名不存在 404 / 地址错误）：重试无意义，直接报出上游原因
@@ -87,7 +100,7 @@ export async function callPlanningAi({
       result = await run();
     } catch (error) {
       lastError = error;
-      if (error.fatal) break; // HTTP 层错误（Key / 模型名 / 地址）重试无意义，直接失败
+      if (error.fatal) break; // HTTP 层错误（Key / 模型名 / 地址）或网络层不可达：重试无意义，直接失败
       continue;
     }
 
