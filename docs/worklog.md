@@ -2,6 +2,16 @@
 
 > 约定：每次功能性改动在此追加一节，写清动机、实现、验证与遇到的问题。
 
+## 2026-08-27 22:50 重新部署 dev server（保留用户数据）
+
+**操作**：杀掉旧 Vite dev server（Windows 侧 PID 12296→54872→30628→37584 进程树，`taskkill /T /F`），以 startup.bat 同等方式重启（分离的 `cmd /c "npm run dev"`、cwd 锁定项目根、日志追加到 `dev-server.log` / `dev-server.err.log`）。新实例 Vite v6.4.2，PID 27204，802ms 就绪，HTTP 200。
+
+**用户数据保护**：
+- 浏览器 localStorage（权威数据源）不受进程重启影响，页面刷新后自动重连 HMR。
+- 文件侧后端 `data/`（config.json / .index.json / daily/ / goals/ / recurring.json，共 13 文件）在重启前打包备份至 `../plan-pilot-data-backup-20260827-2240.tar.gz`，并记录三份核心文件 sha256；重启后逐字节能校验，三个哈希与重启前完全一致，`GET /api/data` 返回真实设置数据。
+- **关键陷阱**：`vite.config.js` 的 `DATA_DIR = path.resolve("data")` 相对运行时 cwd 解析，重启时必须确保 cwd 是项目根，否则会静默创建新的空 data 目录（看似数据丢失）。本次通过 `-WorkingDirectory` 显式锁定。
+- 无关 node 进程（codex、pi 等）已逐一识别并避开，未误伤。
+
 ## 2026-08-27 甘特图交互四连改（滚轮语义 / 条拖拽调时长 / 优先级配色 / 顶级分隔线）
 
 本节按四个功能分四步推进，每步独立 commit（单测 + e2e 验证后提交）。
