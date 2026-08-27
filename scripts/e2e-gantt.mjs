@@ -164,25 +164,61 @@ async function axisTickTexts(page) {
     await ctx.close();
   }
 
-  // ========== 场景 C：滚轮缩放（锚点行为 + 页面不滚动）==========
+  // ========== 场景 C：滚轮交互（默认平移，Ctrl/Shift+滚轮才缩放，页面不滚动）==========
+  // 注：核心断言用页面内 dispatchEvent（cancelable），与真实输入同路径触发 listener + preventDefault；
+  // CDP 合成 wheel（page.mouse.wheel）的默认滚动在 compositor 层不遵守 renderer 的 preventDefault，
+  // 只用于冒烟验证 handler 收到事件（C5）。
   {
     const { ctx, page } = await openSeededGoalsPage(browser);
     await page.locator(".goal-gantt-panel").scrollIntoViewIfNeeded();
     await page.waitForTimeout(200);
-    const beforeTicks = await axisTickTexts(page);
-    const box = await page.locator(".gantt-axis-track").boundingBox();
-    const anchorX = box.x + box.width * 0.7;
-    const anchorY = box.y + box.height / 2;
     const winScrollBefore = await page.evaluate(() => document.querySelector(".workspace").scrollTop || 0);
-    // 放大：wheel deltaY < 0
-    await page.mouse.move(anchorX, anchorY);
-    await page.mouse.wheel(0, -120);
-    await page.waitForTimeout(250);
-    const afterInTicks = await axisTickTexts(page);
-    check("C1: 滚轮放大改变刻度", afterInTicks.join("|") !== beforeTicks.join("|"), `${beforeTicks.length}→${afterInTicks.length} ticks`);
+    const fireWheel = (opts) =>
+      page.evaluate(({ o }) => {
+        const root = document.querySelector(".gantt");
+        const track = document.querySelector(".gantt-axis-track");
+        const r = track.getBoundingClientRect();
+        const ev = new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: r.left + r.width * 0.7, clientY: r.top + r.height / 2, ...o });
+        root.dispatchEvent(ev);
+        return ev.defaultPrevented;
+      }, opts);
+    const readState = () =>
+      page.evaluate(() => ({
+        ticks: [...document.querySelectorAll(".gantt-tick")].map((t) => t.textContent.trim()).join("|"),
+        today: (() => { const t = document.querySelector(".gantt-axis-today"); return t ? Math.round(parseFloat(t.style.left)) : null; })(),
+        scroll: document.querySelector(".workspace").scrollTop || 0,
+      }));
 
-    const pageScrolled = await page.evaluate(() => document.querySelector(".workspace").scrollTop || 0);
-    check("C2: 滚轮未引发页面滚动", pageScrolled === winScrollBefore, `${winScrollBefore} → ${pageScrolled}`);
+    const before = await readState();
+    // C1: Ctrl+滚轮放大（deltaY < 0）
+    await fireWheel({ o: { deltaY: -120, ctrlKey: true } });
+    await page.waitForTimeout(350);
+    const afterCtrl = await readState();
+    check("C1: Ctrl+滚轮放大改变刻度", afterCtrl.ticks !== before.ticks, `${before.ticks} → ${afterCtrl.ticks}`);
+
+    // C2: Shift+滚轮缩小（deltaY > 0）
+    await fireWheel({ o: { deltaY: 120, shiftKey: true } });
+    await page.waitForTimeout(350);
+    const afterShift = await readState();
+    check("C2: Shift+滚轮缩小改变刻度", afterShift.ticks !== afterCtrl.ticks, `${afterCtrl.ticks} → ${afterShift.ticks}`);
+
+    // C3: 裸滚轮平移（窗口右移，「今天」标记左移或移出）
+    await fireWheel({ o: { deltaY: 240 } });
+    await page.waitForTimeout(350);
+    const afterBare = await readState();
+    check("C3: 裸滚轮右移视角（今天标记左移或移出）", afterBare.today === null ? afterShift.today !== null : afterBare.today < afterShift.today, `${afterShift.today} → ${afterBare.today}`);
+
+    // C4: 三个事件全程未引发页面滚动（preventDefault 生效）
+    check("C4: 滚轮未引发页面滚动", [afterCtrl, afterShift, afterBare].every((s) => s.scroll === winScrollBefore), `${winScrollBefore} → ${afterBare.scroll}`);
+
+    // C5: 真实 CDP wheel 冒烟——handler 收到事件并平移（不断言页面滚动，CDP 合成路径的默认滚动不受 preventDefault 控制）
+    const box = await page.locator(".gantt-axis-track").boundingBox();
+    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height / 2);
+    const smokeBefore = (await readState()).today;
+    await page.mouse.wheel(0, 240);
+    await page.waitForTimeout(350);
+    const smokeAfter = (await readState()).today;
+    check("C5: 真实滚轮事件送达 handler（平移生效）", smokeAfter === null ? smokeBefore !== null : smokeAfter < smokeBefore, `${smokeBefore} → ${smokeAfter}`);
     await ctx.close();
   }
 

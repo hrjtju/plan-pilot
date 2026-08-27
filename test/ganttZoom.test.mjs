@@ -8,6 +8,9 @@ import {
   zoomAnchorOffset,
   resolveViewWindow,
   clipBarToViewport,
+  clampPanStartOff,
+  panWindow,
+  wheelToPanDays,
 } from "../src/planner/ganttZoom.js";
 import { addDays as realAddDays, dayDiff as realDiff } from "../src/utils/dateTime.js";
 
@@ -115,4 +118,44 @@ test("clipBarToViewport：交叉裁剪", () => {
   assert.deepEqual(clipBarToViewport(80, 40), { left: 80, width: 20 }); // 右探出
   assert.deepEqual(clipBarToViewport(-10, 120), { left: 0, width: 100 }); // 包住窗口
   assert.deepEqual(clipBarToViewport(10, 20), { left: 10, width: 20 }); // 完全在内
+});
+
+// —— 滚轮平移（pan）：默认滚轮左右平移，Ctrl/Shift 才缩放 ——
+
+test("clampPanStartOff：正常范围内原样返回，并规范化 -0", () => {
+  assert.equal(clampPanStartOff(10, 30, 90), 10);
+  assert.equal(clampPanStartOff(-0.4, 30, 90), 0); // round(-0.4) = -0 → 规范化为 +0
+  assert.ok(!Object.is(clampPanStartOff(-0.4, 30, 90), -0));
+});
+
+test("clampPanStartOff：窗口与内容至少保留 minVisible 天交集", () => {
+  // 内容 90 天，窗口 30 天：起点最左 = 7-30 = -23（右缘压内容首日后 7 天），最右 = 90-7 = 83
+  assert.equal(clampPanStartOff(-40, 30, 90), -23);
+  assert.equal(clampPanStartOff(120, 30, 90), 83);
+  // 窗口 7 天（= minVisible）：不能移动到任何交集 < 7 天的位置 → 被夹在 [7-7, 90-7] = [0, 83]？
+  // minVisible = min(7, 7, 90) = 7 → lo = 0, hi = 83：7 天窗口右缘必须 ≥ 内容首日
+  assert.equal(clampPanStartOff(-10, 7, 90), 0);
+  // 内容比 minVisible 还短：minVisible = min(30,7,5) = 5 → lo = -25, hi = 0 → 窗口左缘最远到内容末日
+  assert.equal(clampPanStartOff(50, 30, 5), 0);
+});
+
+test("panWindow：平移起点并保持 span 不变", () => {
+  assert.deepEqual(panWindow({ startOff: 10, span: 30 }, 5, 90), { startOff: 15, span: 30 });
+  assert.deepEqual(panWindow({ startOff: 10, span: 30 }, -50, 90), { startOff: -23, span: 30 }); // 夹到下界
+  assert.deepEqual(panWindow({ startOff: 10, span: 30 }, 0.4, 90), { startOff: 10, span: 30 }); // round 取整
+});
+
+test("panWindow：非法窗口回落为适应内容", () => {
+  assert.deepEqual(panWindow(null, 5, 90), { startOff: 0, span: 90 });
+  assert.deepEqual(panWindow({ startOff: "x", span: -3 }, 5, 90), { startOff: 0, span: 90 });
+});
+
+test("wheelToPanDays：像素换算、取整与轻扫保底", () => {
+  assert.equal(wheelToPanDays(120, 40), 3); // 一格滚轮 ≈ 3 天
+  assert.equal(wheelToPanDays(-120, 40), -3);
+  assert.equal(wheelToPanDays(100, 300), 1); // round(0.33)=0，但 100px ≥ 阈值 → 保底 1 天
+  assert.equal(wheelToPanDays(-5, 300), 0); // 微颤（< 12px）不动
+  assert.equal(wheelToPanDays(0, 40), 0);
+  assert.equal(wheelToPanDays(120, 0), 0); // 非法 pxPerDay
+  assert.equal(wheelToPanDays(NaN, 40), 0);
 });

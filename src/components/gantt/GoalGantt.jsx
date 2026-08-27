@@ -11,6 +11,8 @@ import {
   zoomAnchorOffset,
   resolveViewWindow,
   clipBarToViewport,
+  panWindow,
+  wheelToPanDays,
 } from "../../planner/ganttZoom.js";
 
 export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
@@ -23,6 +25,8 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
   const barDrag = useRef(null); // 拖拽中的条状态
   const [barDraggingGoalId, setBarDraggingGoalId] = useState(null);
   const today = getLocalDate();
+  const viewDaysRef = useRef(1); // 最新可视天数，供一次性绑定的 wheel 监听读取（避免重绑）
+  const wheelRafRef = useRef(0); // wheel 状态更新的 rAF 调度句柄
 
   function startEditingGoal(goal) {
     setEditingGoalId(goal.id);
@@ -66,6 +70,7 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
   // —— 时间刻度缩放：窗口解析（zoom 为 null 时与旧版行为完全一致：起点 min、跨度 totalDays）——
   const view = useMemo(() => resolveViewWindow(min, max, zoom, addDays, dayDiff), [min, max, zoom]);
   const viewDays = Math.max(1, view.days);
+  viewDaysRef.current = viewDays;
   const viewEndISO = addDays(view.startISO, viewDays);
   const vpctRaw = useCallback(
     (date) => (dayDiff(view.startISO, date) / viewDays) * 100,
@@ -94,25 +99,59 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
     });
   }, []);
 
-  // 滚轮缩放：绑在甘特图区域上，非 passive 以阻止页面滚动
+  // 滚轮平移（默认滚轮）：fit 模式下先以内容全幅为基准窗口，位移后脱离适应模式激活 zoom
+  const applyPan = useCallback((deltaDays) => {
+    setZoom((z) => {
+      const contentDays = Math.max(1, contentRef.current.days);
+      const cur = z || { startOff: 0, span: contentDays };
+      const next = panWindow(cur, deltaDays, contentDays);
+      if (next.startOff === cur.startOff) return z; // 无位移（含夹取到边界）保持原状态，避免多余重渲染
+      return next;
+    });
+  }, []);
+
+  // wheel 监听内同步 setState 会拉长 listener 执行（React 离散事件同步 flush 重渲染），
+  // Chromium 对 wheel 的可取消性有 ~100ms 超时：超时后 preventDefault 失效、默认滚动启动（实测页面被滚 51px）。
+  // 故 listener 内只同步 preventDefault 与意图计算，状态更新推迟到下一帧 rAF。
+  function scheduleWheelUpdate(fn) {
+    if (wheelRafRef.current) cancelAnimationFrame(wheelRafRef.current);
+    wheelRafRef.current = requestAnimationFrame(() => {
+      wheelRafRef.current = 0;
+      fn();
+    });
+  }
+
+  // 滚轮交互：平移/缩放时间轴，绑在甘特图区域上，非 passive 以阻止页面滚动
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return undefined;
     function onWheel(e) {
-      if (!e.deltaY) return;
-      // 语义：滚轮落在甘特图上 = 缩放时间刻度，不滚动页面。
+      if (!e.deltaY && !e.deltaX) return;
+      // 语义：滚轮落在甘特图上 = 平移/缩放时间轴，不滚动页面。
       // 防御性回卷：合成输入路径（如自动化/平滑滚动）的默认滚动可能跨多帧发生，
       // 短时窗口内强制锁回原位后自动解除。
       const ws = root.closest(".workspace") || null;
       const prevTop = ws ? ws.scrollTop : null;
       e.preventDefault();
-      const track = root.querySelector(".gantt-axis-track");
-      let ratio = 0.5;
-      if (track) {
-        const r = track.getBoundingClientRect();
-        if (r.width > 0) ratio = (e.clientX - r.left) / r.width;
+      if (e.ctrlKey || e.shiftKey) {
+        // 缩放分支：注意 Chrome/Firefox 会把 Shift+滚轮的位移挪到 deltaX，需容错取方向
+        const track = root.querySelector(".gantt-axis-track");
+        let ratio = 0.5;
+        if (track) {
+          const r = track.getBoundingClientRect();
+          if (r.width > 0) ratio = (e.clientX - r.left) / r.width;
+        }
+        const dir = (e.deltaY || e.deltaX) > 0 ? 1 : -1;
+        scheduleWheelUpdate(() => applyZoomStep(dir, ratio));
+      } else {
+        // 平移分支：优先横向位移（触控板双指横扫），否则用纵向；deltaMode=行/页时归一为像素
+        const axis = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        const px = e.deltaMode === 1 ? axis * 40 : e.deltaMode === 2 ? axis * 400 : axis;
+        const track = root.querySelector(".gantt-track");
+        const trackW = track && track.clientWidth > 0 ? track.clientWidth : 0;
+        const days = wheelToPanDays(px, trackW / Math.max(1, viewDaysRef.current));
+        if (days) scheduleWheelUpdate(() => applyPan(days));
       }
-      applyZoomStep(e.deltaY > 0 ? 1 : -1, ratio);
       if (ws && prevTop != null) {
         const lockUntil = performance.now() + 280;
         const guard = () => {
@@ -126,8 +165,11 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
       }
     }
     root.addEventListener("wheel", onWheel, { passive: false });
-    return () => root.removeEventListener("wheel", onWheel);
-  }, [applyZoomStep, goals.length > 0]); // 空列表分支与正常分支切换时会替换 .gantt 节点，需重绑
+    return () => {
+      root.removeEventListener("wheel", onWheel);
+      if (wheelRafRef.current) cancelAnimationFrame(wheelRafRef.current);
+    };
+  }, [applyZoomStep, applyPan, goals.length > 0]); // 空列表分支与正常分支切换时会替换 .gantt 节点，需重绑
 
   // —— 条拖拽（仅限显式设定了起止日期的目标）：整体平移，保持时长，按天对齐 ——
   function barMovable(goal, span) {
