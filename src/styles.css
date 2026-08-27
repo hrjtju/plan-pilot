@@ -2942,9 +2942,13 @@ html[data-theme="night"] {
 .gantt-bar.is-dragging { cursor: grabbing; z-index: 6; box-shadow: 0 4px 12px color-mix(in srgb, #000 22%, transparent); transition: none; user-select: none; }
 .gantt-bar.estimated { border-style: dashed; opacity: 0.85; }
 .gantt-bar.explicit { border-style: double; border-width: 4px; }
-.gantt-bar.priority-high { border-color: var(--danger); }
-.gantt-bar.priority-medium { border-color: var(--pending); }
-.gantt-bar.priority-low { border-color: var(--faint); }
+.gantt-bar.priority-high { background: var(--priority-high-soft); border-color: var(--priority-high-bar); color: var(--priority-high-bar); }
+.gantt-bar.priority-medium { background: var(--priority-medium-soft); border-color: var(--priority-medium-bar); color: var(--priority-medium-bar); }
+.gantt-bar.priority-low { background: var(--priority-low-soft); border-color: var(--priority-low-bar); color: var(--priority-low-bar); }
+.gantt-bar.priority-high .gantt-bar-fill { background: color-mix(in srgb, var(--priority-high-bar) 34%, transparent); }
+.gantt-bar.priority-medium .gantt-bar-fill { background: color-mix(in srgb, var(--priority-medium-bar) 34%, transparent); }
+.gantt-bar.priority-low .gantt-bar-fill { background: color-mix(in srgb, var(--priority-low-bar) 34%, transparent); }
+.gantt-bar.priority-high .gantt-bar-pct, .gantt-bar.priority-medium .gantt-bar-pct, .gantt-bar.priority-low .gantt-bar-pct { color: inherit; }
 .gantt-bar.status-done { opacity: 0.6; }
 .gantt-bar-handle { position: absolute; top: 0; bottom: 0; width: 10px; cursor: ew-resize; touch-action: none; z-index: 2; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity var(--dur-fast) ease; }
 .gantt-bar-handle.is-start { left: 0; }

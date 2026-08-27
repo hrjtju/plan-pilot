@@ -40,7 +40,7 @@ function makeBrowser() {
 }
 const pwLoader = makeBrowser();
 
-async function openSeededGoalsPage(browser) {
+async function openSeededGoalsPage(browser, extraGoals = []) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   // 隔离文件后端：拦截 /api/data 避免 GET 覆盖种子
   await ctx.route("**/api/data", (route) =>
@@ -84,6 +84,7 @@ async function openSeededGoalsPage(browser) {
         startDate: "",
         endDate: "",
       },
+      ...extraGoals,
     ],
     tasks: [],
     blocks: [],
@@ -342,6 +343,40 @@ async function axisTickTexts(page) {
       return derived ? derived.querySelectorAll(".gantt-bar-handle").length : -1;
     });
     check("F3: 派生跨度条无 resize 手柄", derivedHandles === 0, `handles=${derivedHandles}`);
+    await ctx.close();
+  }
+
+  // ========== 场景 G：优先级配色（背景随 priority 变量，三档可区分）==========
+  {
+    const { ctx, page } = await openSeededGoalsPage(browser, [
+      { id: "g-e2e-high", title: "甘特高优先级目标", type: "week", priority: "high", status: "active", progress: 0, parentId: "", startDate: "", endDate: "" },
+    ]);
+    await page.locator(".goal-gantt-panel").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    const colors = await page.evaluate(() => {
+      const varRgb = (name) => {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        const m = v.match(/^#([0-9a-f]{6})$/i);
+        const n = parseInt(m[1], 16);
+        return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+      };
+      const pick = (p) => {
+        const bar = document.querySelector(`.gantt-bar.priority-${p}`);
+        return bar ? getComputedStyle(bar).backgroundColor : null;
+      };
+      return {
+        high: pick("high"),
+        medium: pick("medium"),
+        low: pick("low"),
+        expHigh: varRgb("--priority-high-soft"),
+        expMedium: varRgb("--priority-medium-soft"),
+        expLow: varRgb("--priority-low-soft"),
+      };
+    });
+    check("G1: 高优先级条背景 = --priority-high-soft", colors.high === colors.expHigh && colors.high !== null, `${colors.high}`);
+    check("G2: 中优先级条背景 = --priority-medium-soft", colors.medium === colors.expMedium && colors.medium !== null, `${colors.medium}`);
+    check("G3: 低优先级条背景 = --priority-low-soft", colors.low === colors.expLow && colors.low !== null, `${colors.low}`);
+    check("G4: 三档优先级颜色可区分", new Set([colors.high, colors.medium, colors.low]).size === 3, JSON.stringify(colors));
     await ctx.close();
   }
 

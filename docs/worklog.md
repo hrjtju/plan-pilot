@@ -38,3 +38,14 @@
 **问题与发现**：
 1. 手柄用 `setPointerCapture` 后，pointermove 的 target 是手柄而非条——但事件仍沿 DOM 冒泡，条上的统一 handler 能收到；`e.currentTarget` 始终是绑定 handler 的条，预览 CSS 变量设置在条上即可，手柄随条尺寸自动跟随。
 2. Playwright 的 `mouse.down/move/up` 能驱动 pointer 事件（Chromium 将 mouse input 合成 PointerEvent），与现有场景 D 的整体拖拽同路径，无需单独的 touch 注入。
+
+### 功能 C：甘特条按优先级配色
+
+**动机**：原先条只有统一 accent 底色 + 优先级只改变边框色，区分度弱。
+
+**实现**：四套主题均已定义 `--priority-{high,medium,low}-{soft,bar,ink}` 变量（任务列表/目标卡在用），直接复用：条背景 = soft、边框 = bar、进度填充 = bar 色 34% 混透明、pct 文字继承边框色；`status-done` 的降透明度、`estimated` 虚线保持叠加生效。
+
+**验证**：e2e 新增场景 G——seed 注入高优先级目标，断言三档条的 computed `background-color` 分别等于对应 CSS 变量的解析值（跟随主题而非硬编码色值）且三色互不相同；另有 `test/ganttPriorityStyles.test.mjs` 两个静态存在性检查防规则被误删（视觉正确性由场景 G 覆盖，此处不重复声称）。
+
+**问题与发现**：
+1. 纯 CSS 改动没有渲染层单测基建，选了「computed style vs CSS 变量解析值」的 e2e 断言路线，比硬编码 rgb 期望值更耐主题调整；静态文件检查只作为存在性防回归，不能证明视觉正确，两类测试的分工在注释中明确标注。
