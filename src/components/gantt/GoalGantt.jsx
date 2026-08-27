@@ -3,6 +3,7 @@ import { Pencil, Trash2, ZoomIn, ZoomOut, Scan } from "lucide-react";
 import { addDays, dayDiff, formatShortDate, getLocalDate } from "../../utils/dateTime.js";
 import { goalTypeLabel } from "../../constants/labels.js";
 import { buildGoalGantt } from "../../planner/gantt.js";
+import { clampResizeDelta } from "../../planner/ganttBarResize.js";
 import { EmptyState } from "../../components/EmptyState.jsx";
 import {
   GANTT_ZOOM_MIN_DAYS,
@@ -22,7 +23,7 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
   const [zoom, setZoom] = useState(null); // null = 适应内容；否则 {startOff（相对内容最早日的天偏移，可为负）, span（可视天数）}
   const rootRef = useRef(null);
   const contentRef = useRef({ min: "", max: "", days: 1 }); // 最新内容窗口，供一次性绑定的 wheel 监听读取
-  const barDrag = useRef(null); // 拖拽中的条状态
+  const barDrag = useRef(null); // 拖拽中的条状态：{ mode: "move"|"resize-start"|"resize-end", goalId, startX, trackW, origStart, origEnd, shift }
   const [barDraggingGoalId, setBarDraggingGoalId] = useState(null);
   const today = getLocalDate();
   const viewDaysRef = useRef(1); // 最新可视天数，供一次性绑定的 wheel 监听读取（避免重绑）
@@ -171,15 +172,15 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
     };
   }, [applyZoomStep, applyPan, goals.length > 0]); // 空列表分支与正常分支切换时会替换 .gantt 节点，需重绑
 
-  // —— 条拖拽（仅限显式设定了起止日期的目标）：整体平移，保持时长，按天对齐 ——
+  // —— 条拖拽（仅限显式设定了起止日期的目标）：整体平移（保时长）或拖边缘调时长，按天对齐 ——
   function barMovable(goal, span) {
     return Boolean(span.derived === "explicit" && goal.startDate && goal.endDate);
   }
-  function handleBarPointerDown(e, goal, span) {
-    if (e.button !== 0 || !barMovable(goal, span)) return;
+  function beginBarDrag(e, goal, mode) {
     const trackEl = e.currentTarget.closest(".gantt-track");
-    if (!trackEl) return;
+    if (!trackEl) return false;
     barDrag.current = {
+      mode,
       goalId: goal.id,
       startX: e.clientX,
       trackW: trackEl.clientWidth || 1,
@@ -188,30 +189,64 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
       shift: 0,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
-    e.currentTarget.style.setProperty("--bar-shift", "0px");
     setBarDraggingGoalId(goal.id);
+    return true;
+  }
+  function handleBarPointerDown(e, goal, span) {
+    if (e.button !== 0 || !barMovable(goal, span)) return;
+    if (!beginBarDrag(e, goal, "move")) return;
+    e.currentTarget.style.setProperty("--bar-shift", "0px");
+  }
+  function handleResizePointerDown(e, goal, edge) {
+    if (e.button !== 0 || !goal.startDate || !goal.endDate) return; // 手柄仅在 movable 条上渲染，此处只兜底
+    e.stopPropagation(); // 防止触发整体平移
+    if (!beginBarDrag(e, goal, `resize-${edge}`)) return;
+    e.currentTarget.style.setProperty("--bar-dl", "0px");
+    e.currentTarget.style.setProperty("--bar-dw", "0px");
   }
   function handleBarPointerMove(e) {
     const drag = barDrag.current;
     if (!drag) return;
     const pxPerDay = drag.trackW / viewDays;
-    const shift = Math.round((e.clientX - drag.startX) / pxPerDay);
-    if (shift !== drag.shift) {
-      drag.shift = shift;
-      e.currentTarget.style.setProperty("--bar-shift", `${shift * pxPerDay}px`); // 预览用 CSS 变量位移，不触发重渲染
+    if (drag.mode === "move") {
+      const shift = Math.round((e.clientX - drag.startX) / pxPerDay);
+      if (shift !== drag.shift) {
+        drag.shift = shift;
+        e.currentTarget.style.setProperty("--bar-shift", `${shift * pxPerDay}px`); // 预览用 CSS 变量位移，不触发重渲染
+      }
+      return;
+    }
+    // resize：预览用 left/width 增量 CSS 变量，增量经 clamp 保底 1 天时长
+    const edge = drag.mode === "resize-start" ? "start" : drag.mode === "resize-end" ? "end" : "";
+    if (!edge) return;
+    const delta = clampResizeDelta(drag.origStart, drag.origEnd, edge, (e.clientX - drag.startX) / pxPerDay, dayDiff);
+    if (delta !== drag.shift) {
+      drag.shift = delta;
+      const dl = drag.mode === "resize-start" ? delta * pxPerDay : 0;
+      const dw = (drag.mode === "resize-start" ? -delta : delta) * pxPerDay;
+      e.currentTarget.style.setProperty("--bar-dl", `${dl}px`);
+      e.currentTarget.style.setProperty("--bar-dw", `${dw}px`);
     }
   }
   function handleBarPointerUp(e) {
     const drag = barDrag.current;
     e.currentTarget?.style.removeProperty("--bar-shift");
+    e.currentTarget?.style.removeProperty("--bar-dl");
+    e.currentTarget?.style.removeProperty("--bar-dw");
     if (!drag) return;
     barDrag.current = null;
     setBarDraggingGoalId(null);
     if (drag.shift === 0) return;
-    updateGoal(drag.goalId, {
-      startDate: addDays(drag.origStart, drag.shift),
-      endDate: addDays(drag.origEnd, drag.shift),
-    });
+    if (drag.mode === "move") {
+      updateGoal(drag.goalId, {
+        startDate: addDays(drag.origStart, drag.shift),
+        endDate: addDays(drag.origEnd, drag.shift),
+      });
+    } else if (drag.mode === "resize-start") {
+      updateGoal(drag.goalId, { startDate: addDays(drag.origStart, drag.shift) });
+    } else if (drag.mode === "resize-end") {
+      updateGoal(drag.goalId, { endDate: addDays(drag.origEnd, drag.shift) });
+    }
   }
 
   if (!goals.length) {
@@ -392,14 +427,14 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
                     if (!vis) return null; // 完全在窗口外（缩放后正常）
                     const movable = barMovable(goal, span);
                     const moveHint = movable
-                      ? "拖动平移起止日期（时长不变）"
+                      ? "拖动平移起止日期（时长不变）；拖边缘调整起止"
                       : span.derived === "tasks"
                         ? "跨度由关联任务决定，不可拖拽；在编辑中手动指定开始/结束后可拖动"
                         : "无手动日期范围，在编辑中设置开始/结束日期后即可拖动";
                     return (
                       <div
                         className={`gantt-bar status-${goal.status} priority-${goal.priority}${span.derived === "type" ? " estimated" : ""}${span.derived === "explicit" ? " explicit" : ""}${movable ? " is-movable" : ""}${barDraggingGoalId === goal.id ? " is-dragging" : ""}`}
-                        style={{ left: `${vis.left}%`, width: `${vis.width}%` }}
+                        style={{ left: `calc(${vis.left}% + var(--bar-dl, 0px))`, width: `calc(${vis.width}% + var(--bar-dw, 0px))` }}
                         title={`${span.start} → ${span.end}（${span.derived === "explicit" ? "手动指定" : span.derived === "tasks" ? "按关联任务" : "按类型估算"}）· ${moveHint}`}
                         onPointerDown={movable ? (e) => handleBarPointerDown(e, goal, span) : undefined}
                         onPointerMove={movable ? handleBarPointerMove : undefined}
@@ -408,6 +443,20 @@ export function GoalGantt({ goals, tasks, goalById, updateGoal, deleteGoal }) {
                       >
                         <span className="gantt-bar-fill" style={{ width: `${progress}%` }} />
                         <span className="gantt-bar-pct">{progress}%</span>
+                        {movable && (
+                          <>
+                            <span
+                              className="gantt-bar-handle is-start"
+                              title="拖动调整开始日期"
+                              onPointerDown={(e) => handleResizePointerDown(e, goal, "start")}
+                            />
+                            <span
+                              className="gantt-bar-handle is-end"
+                              title="拖动调整结束日期"
+                              onPointerDown={(e) => handleResizePointerDown(e, goal, "end")}
+                            />
+                          </>
+                        )}
                       </div>
                     );
                   })()}

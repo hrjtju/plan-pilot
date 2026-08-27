@@ -22,3 +22,19 @@
 2. **Playwright/CDP 合成 wheel 的默认滚动不受 renderer 的 preventDefault 控制**（compositor 层不等待/不理会主线程判定），`page.mouse.wheel` 不能用于断言「页面不滚动」。e2e 的核心滚轮断言改用页面内 `dispatchEvent(new WheelEvent(..., { cancelable: true }))`——与真实输入同路径触发 listener 与 preventDefault，行为确定；真实 CDP wheel 仅保留一条冒烟断言（handler 收到事件并平移生效）。
 3. **Vite dev server 的模块 transform 缓存可能卡在坏状态**：编辑器多次原子写入之间 HMR 窗口期，模块图缓存了损坏结果，之后不带查询参数的 URL 一直返回空 body（页面报 `does not provide an export named 'GoalGantt'`，curl 该模块只回一个空 sourceMappingURL）。`touch` 文件或给 URL 加查询参数即可恢复。以后 e2e 莫名「组件导出丢失」先 touch 再怀疑代码。
 4. **page.evaluate 传参解构不匹配的静默失效**：`fireWheel({ deltaY })` 传给 `evaluate(({ o }) => ...)` 少包了一层 `o`，导致 WheelEvent 的 deltaY 恒为 0、handler 按「无位移」提前 return——表现为「合成事件完全无效」，排查绕了大弯。教训：evaluate 回调签名与传参形状要配对检查，dispatch 后先断言 `ev.defaultPrevented` 再往下查。
+
+### 功能 B：甘特条边缘拖拽调整时长
+
+**动机**：原先条只能整体平移（保时长），想改起止日期只能进编辑表单填日期。
+
+**实现**：
+- 新建 `src/planner/ganttBarResize.js`：`clampResizeDelta(origStart, origEnd, edge, deltaDays, dayDiffFn)` 纯函数——左缘（start）向右最多拖到与 end 重合、右缘（end）向左最多拖到与 start 重合，均保底 1 天时长；round 取整、`-0` 规范化。
+- `GoalGantt.jsx`：拖拽状态机扩展为 `mode: "move" | "resize-start" | "resize-end"`；条两端新增 `.gantt-bar-handle`（仅 movable 条渲染），手柄 `pointerdown` 时 `stopPropagation()` 防止触发整体平移，`setPointerCapture` 在手柄上、后续 move/up 事件冒泡回条上的统一 handler；预览用 `--bar-dl/--bar-dw`（left/width 的像素增量）替代重渲染，提交时只写受影响的那个日期字段。
+- 条的 `left/width` 改为 `calc(<%> + var(--bar-dl/dw, 0px))`，与整体平移的 `--bar-shift` 互不干扰。
+- CSS：手柄 10px 宽热区，hover/拖拽中显竖条，`touch-action: none`；派生跨度条无手柄。
+
+**验证**：新增 `test/ganttBarResize.test.mjs` 4 组用例（外扩/内收/夹取/单日条不可再收，121 全绿）；e2e 新增场景 F（F1a 预览变量、F1b 右缘外扩 start 不变、F2 左缘内收 end 不变、F2c 时长收缩、F3 派生条无手柄），全部通过。
+
+**问题与发现**：
+1. 手柄用 `setPointerCapture` 后，pointermove 的 target 是手柄而非条——但事件仍沿 DOM 冒泡，条上的统一 handler 能收到；`e.currentTarget` 始终是绑定 handler 的条，预览 CSS 变量设置在条上即可，手柄随条尺寸自动跟随。
+2. Playwright 的 `mouse.down/move/up` 能驱动 pointer 事件（Chromium 将 mouse input 合成 PointerEvent），与现有场景 D 的整体拖拽同路径，无需单独的 touch 注入。

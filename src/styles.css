@@ -2946,6 +2946,11 @@ html[data-theme="night"] {
 .gantt-bar.priority-medium { border-color: var(--pending); }
 .gantt-bar.priority-low { border-color: var(--faint); }
 .gantt-bar.status-done { opacity: 0.6; }
+.gantt-bar-handle { position: absolute; top: 0; bottom: 0; width: 10px; cursor: ew-resize; touch-action: none; z-index: 2; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity var(--dur-fast) ease; }
+.gantt-bar-handle.is-start { left: 0; }
+.gantt-bar-handle.is-end { right: 0; }
+.gantt-bar-handle::after { content: ""; width: 2.5px; height: 10px; border-radius: 2px; background: color-mix(in srgb, var(--surface) 88%, transparent); }
+.gantt-bar.is-movable:hover .gantt-bar-handle, .gantt-bar.is-dragging .gantt-bar-handle { opacity: 1; }
 .gantt-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 26%, transparent); }
 .gantt-bar-pct { position: relative; padding: 0 7px; font-size: 10.5px; font-weight: 700; color: var(--accent); white-space: nowrap; }
 

@@ -283,6 +283,68 @@ async function axisTickTexts(page) {
     await ctx.close();
   }
 
+  // ========== 场景 F：拖拽 bar 边缘调整时长（右缘外扩 / 左缘内收）==========
+  {
+    const { ctx, page, iso } = await openSeededGoalsPage(browser);
+    await page.locator(".goal-gantt-panel").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    const origStart = iso(-2);
+    const origEnd = iso(4);
+
+    const barBox = await page.locator(".gantt-bar.is-movable").boundingBox();
+    const dayPx = barBox.width / 7; // 显式目标跨度 7 天
+
+    // F1: 拖右缘外扩约 2 天
+    const endHandle = await page.locator(".gantt-bar.is-movable .gantt-bar-handle.is-end").boundingBox();
+    const ex = endHandle.x + endHandle.width / 2;
+    const ey = endHandle.y + endHandle.height / 2;
+    await page.mouse.move(ex, ey);
+    await page.mouse.down();
+    await page.mouse.move(ex + dayPx * 2, ey, { steps: 8 });
+    await page.waitForTimeout(80);
+    const midResize = await page.evaluate(() => {
+      const bar = document.querySelector(".gantt-bar.is-movable");
+      return { dragging: bar.classList.contains("is-dragging"), dw: bar.style.getPropertyValue("--bar-dw") };
+    });
+    check("F1a: 拖缘中 is-dragging 且有宽度预览", midResize.dragging && midResize.dw !== "", JSON.stringify(midResize));
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const savedEnd = await page.evaluate(() => {
+      const g = JSON.parse(localStorage.getItem("personal-planning-coach-v1")).goals.find((x) => x.id === "g-e2e-explicit");
+      return { start: g.startDate, end: g.endDate };
+    });
+    const day = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
+    check("F1b: 右缘外扩约 +2 天（start 不变）", day(origEnd, savedEnd.end) >= 1 && day(origEnd, savedEnd.end) <= 3 && savedEnd.start === origStart, JSON.stringify(savedEnd));
+
+    // F2: 拖左缘内收约 2 天（start 后移，end 保持）
+    const barBox2 = await page.locator(".gantt-bar.is-movable").boundingBox();
+    const startHandle = await page.locator(".gantt-bar.is-movable .gantt-bar-handle.is-start").boundingBox();
+    const sx = startHandle.x + startHandle.width / 2;
+    const sy = startHandle.y + startHandle.height / 2;
+    await page.mouse.move(sx, sy);
+    await page.mouse.down();
+    await page.mouse.move(sx + dayPx * 2, sy, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const savedStart = await page.evaluate(() => {
+      const g = JSON.parse(localStorage.getItem("personal-planning-coach-v1")).goals.find((x) => x.id === "g-e2e-explicit");
+      return { start: g.startDate, end: g.endDate };
+    });
+    const shrink = day(savedEnd.start, savedStart.start);
+    check("F2a: 左缘内收约 +2 天（start 后移）", shrink >= 1 && shrink <= 3, `start ${savedEnd.start} → ${savedStart.start}`);
+    check("F2b: end 保持不变", savedStart.end === savedEnd.end, `${savedStart.end}`);
+    check("F2c: 时长收缩且 ≥ 1 天", day(savedStart.start, savedStart.end) >= 0 && day(savedStart.start, savedStart.end) < day(savedEnd.start, savedEnd.end), `new len=${day(savedStart.start, savedStart.end)}`);
+
+    // F3: 零回归——不可拖条（派生跨度）无手柄
+    const derivedHandles = await page.evaluate(() => {
+      const bars = [...document.querySelectorAll(".gantt-bar")];
+      const derived = bars.find((b) => !b.classList.contains("is-movable"));
+      return derived ? derived.querySelectorAll(".gantt-bar-handle").length : -1;
+    });
+    check("F3: 派生跨度条无 resize 手柄", derivedHandles === 0, `handles=${derivedHandles}`);
+    await ctx.close();
+  }
+
   check("无页面 JS 错误", jsErrorsAll.length === 0, jsErrorsAll.slice(0, 2).join(" | "));
 
   console.log(failCount === 0 ? "\n全部通过" : `\n${failCount} 项失败`);
