@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { defaultState } from "../app/initialState.js";
 import { STORAGE_KEY } from "../constants/appConstants.js";
+import { hasLocalServer } from "../app/platform.js";
 import { hydrateState } from "../planner/hydration.js";
 
 function hasPlannerContent(fileData) {
@@ -40,6 +41,11 @@ export function usePlannerStore({ compactPlannerTasks, mergeTasks }) {
   const saveTimer = useRef(null);
 
   useEffect(() => {
+    // 原生壳无本机服务器：直接走 localStorage，不发 /api/data 请求
+    if (!hasLocalServer) {
+      setLoaded(true);
+      return undefined;
+    }
     let cancelled = false;
     let attempts = 0;
 
@@ -117,20 +123,22 @@ export function usePlannerStore({ compactPlannerTasks, mergeTasks }) {
       console.error("localStorage write failed:", error);
     }
 
-    // 文件写入防抖，避免连续编辑时频繁请求本地 API
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      fetch("/api/data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(state),
-      })
-        .then((response) => {
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          setSyncIssue(null); // 保存成功即恢复健康（服务可能已重新拉起）
+    // 文件写入防抖，避免连续编辑时频繁请求本地 API（原生壳跳过：localStorage 已落盘、无本机服务器可写）
+    if (hasLocalServer) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        fetch("/api/data", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(state),
         })
-        .catch(() => setSyncIssue(SYNC_ISSUE_TEXT));
-    }, 2000);
+          .then((response) => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            setSyncIssue(null); // 保存成功即恢复健康（服务可能已重新拉起）
+          })
+          .catch(() => setSyncIssue(SYNC_ISSUE_TEXT));
+      }, 2000);
+    }
     return () => clearTimeout(saveTimer.current);
   }, [state, loaded]);
 

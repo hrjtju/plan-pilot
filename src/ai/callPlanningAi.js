@@ -1,4 +1,6 @@
 import { tryExtractJson, richestJson, isMeaningfulJson } from "../jsonExtract.js";
+import { isNative } from "../app/platform.js";
+import { directChatFetch } from "./directAi.js";
 
 function flattenMessageContent(value) {
   return Array.isArray(value)
@@ -27,11 +29,14 @@ export async function callPlanningAi({
   // 所以 JSON 模式给一个较高的下限，保证「想完还能把 JSON 写出来」。非推理模型用不满，不会涨成本。
   const effectiveMax = json ? Math.max(maxTokens, 5000) : maxTokens;
 
+  // 原生壳：无代理服务器，走原生 HTTP 直连（绕过 WebView CORS）
+  const post = isNative ? directChatFetch : fetchImpl;
+
   // 单次调用：jsonMode=是否启用严格 json_object（弱模型常因此返回空）；extra=追加的纠正消息
   async function once(jsonMode, extra) {
     let response;
     try {
-      response = await fetchImpl("/api/ai/chat", {
+      response = await post("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -48,16 +53,18 @@ export async function callPlanningAi({
         }),
       });
     } catch (error) {
-      // 浏览器网络层失败（TypeError: Failed to fetch）：请求从未到达本地 API 代理——
-      // 是 dev server 未运行 / 正在重启 / 被防火墙或代理拦截，不是 AI 上游返回的错误。
-      // 重试无意义，直接转成可行动的提示，避免误导性的“可换更稳的模型”建议。
-      const wrapped = new Error(
-        "本地 API 代理不可达：dev server 未运行或正在重启，请先启动服务（npm run dev 或 startup.bat）再试。",
-      );
+      // 网络层失败（TypeError: Failed to fetch）：
+      // - 浏览器：请求从未到达本地 API 代理——dev server 未运行 / 正在重启 / 被防火墙或代理拦截。
+      //   重试无意义，直接转成可行动的提示，避免误导性的“可换更稳的模型”建议。
+      // - 原生壳（directChatFetch）：无本地代理可言，是设备网络不可达或服务商地址不通。
+      const wrapped = isNative
+        ? new Error("网络不可达：无法连接 AI 服务，请检查设备网络或服务商地址后重试。")
+        : new Error("本地 API 代理不可达：dev server 未运行或正在重启，请先启动服务（npm run dev 或 startup.bat）再试。");
       wrapped.fatal = true;
       wrapped.cause = error;
       throw wrapped;
     }
+
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       // HTTP 层错误（Key 无效 401 / 模型名不存在 404 / 地址错误）：重试无意义，直接报出上游原因
