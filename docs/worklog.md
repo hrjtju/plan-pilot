@@ -24,6 +24,8 @@
 - 既有小瑕疵（不在本次范围）：健康状态（无 questions）面板内容也比行高超出约 19px（子项 min-content 和 ≈424 > 行高 405），修复前溢出 1.6–7.8px 不可见，修复后表现为面板内部轻微滚动，可接受。
 
 **合并与推送**：经用户确认（“merge and push and update worklog altogether”），fix/schedule-questions-timeline-overflow 快进合并进 master 并推送 origin；随同入库的还有此前未提交的 2026-08-28 00:22 dev server 重启记录（独立 docs commit）。WSL 侧 push 沿用 d4c4320 记录的凭据桥接方案。
+
+**勘误（凭据桥接）**：d4c4320 记录的 `-c credential.helper="C:/…/git-credential-manager.exe"` 在 **WSL 侧 git** 下无效——Linux 视角下 `C:/` 不是绝对路径，git 会把整个值当 helper 名（报 `git: 'credential-C:/…' is not a git command`）。可用两法：① 直接用 Windows 侧 git 执行 push（本机 `C:\3_apps\git\Git\cmd\git.exe -C <win路径> push`，其自身已配 `credential.helper=manager`，本次即用此法）；② 若坚持 WSL git，helper 路径须写 `/mnt/c/…` 形式。
 ## 2026-08-28 00:22 重启 dev server 实例
 
 **动机**：5173 端口空置，dev server 未在运行（上一实例此前被 Ctrl+C 终止，`dev-server.err.log` 残留 `^C^C`），用户要求启动实例。
