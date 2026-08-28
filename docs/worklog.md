@@ -22,6 +22,8 @@
 - kimi-webbridge skill 在本机 skills 目录不存在（任务提示可用），改用 webapp-testing skill（Playwright）完成调查。
 - 环境踩坑：WSL→Windows 传环境变量需 WSLENV（NODE_PATH 直接 export 无效，改用 require 绝对路径）；WSL 后台起的 Windows 进程随 shell 退出被杀，dev server 需与验证脚本同命令内启动。
 - 既有小瑕疵（不在本次范围）：健康状态（无 questions）面板内容也比行高超出约 19px（子项 min-content 和 ≈424 > 行高 405），修复前溢出 1.6–7.8px 不可见，修复后表现为面板内部轻微滚动，可接受。
+
+**合并与推送**：经用户确认（“merge and push and update worklog altogether”），fix/schedule-questions-timeline-overflow 快进合并进 master 并推送 origin；随同入库的还有此前未提交的 2026-08-28 00:22 dev server 重启记录（独立 docs commit）。WSL 侧 push 沿用 d4c4320 记录的凭据桥接方案。
 ## 2026-08-28 00:22 重启 dev server 实例
 
 **动机**：5173 端口空置，dev server 未在运行（上一实例此前被 Ctrl+C 终止，`dev-server.err.log` 残留 `^C^C`），用户要求启动实例。
