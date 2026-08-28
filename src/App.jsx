@@ -114,7 +114,6 @@ function App() {
   const [localAiKey, updateLocalAiKey] = useLocalAiKey();
   const [voiceKey, updateVoiceKey] = useLocalVoiceKey(); // 语音 ASR 独立 Key（聊天 Key 之外的回落链：voiceKey → localAiKey → 服务器环境变量）
   const [serverAiKeyLoaded, setServerAiKeyLoaded] = useState(false);
-  const [syncWarningDismissed, setSyncWarningDismissed] = useState(false); // 文件同步不可用提示的关闭状态
   const [activeView, setActiveView] = useState("today");
   const [settingsOpen, setSettingsOpen] = useState(false); // 设置抽屉开合
   const [cmdOpen, setCmdOpen] = useState(false); // ⌘K 命令条开合
@@ -249,11 +248,6 @@ function App() {
       .then((s) => setServerAiKeyLoaded(!!s.configured))
       .catch(() => setServerAiKeyLoaded(false));
   }, []);
-
-  useEffect(() => {
-    // 同步恢复后重置关闭标记，下次再失败时提示会重新出现
-    if (!fileSyncIssue) setSyncWarningDismissed(false);
-  }, [fileSyncIssue]);
 
   const dayPlan = planner.dayPlans[selectedDate] || {
     fixed: "",
@@ -1948,18 +1942,10 @@ function App() {
       />
 
       <section className="workspace">
-        {fileSyncIssue && !syncWarningDismissed && (
+        {fileSyncIssue && (
           <div className="sync-warning" role="alert">
             <CloudOff size={15} />
             <span>{fileSyncIssue}</span>
-            <button
-              type="button"
-              className="schedule-notice-close"
-              onClick={() => setSyncWarningDismissed(true)}
-              aria-label="关闭提示"
-            >
-              ×
-            </button>
           </div>
         )}
         <header className="topbar">

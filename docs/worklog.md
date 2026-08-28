@@ -4,7 +4,7 @@
 
 ## 2026-08-28 排查：甘特图顺延未同步到坚果云（含 dev server 重启验证）
 
-**现象**：用户报告在甘特图上做的顺延变更未同步到坚果云。
+**现象**：用户报告在甘特图上做的顺延变更未同步到坚果云。排查后按用户确认实施了：卡留数据抢救 + 离线同步韧性根治（详见下一节）。
 
 **取证与结论**（全部证据可复核）：
 1. 同步链路为：浏览器 state → 防抖 POST /api/data → `saveAllData` 写 `data/` 文件 → 坚果云客户端上传。坚果云同步根即 `C:\Users\Ivy\1_projects\plan-pilot\data`（sandbox id 29999531，日志确认；`Nutstore\1\data.lnk` 只是指向它的快捷方式）。
@@ -17,6 +17,28 @@
 **风险（待用户确认后处理）**：
 - 那 3 个卡在 localStorage 的 blocks，若用户刷新页面会被“文件优先”水合逻辑用旧文件状态覆盖而丢失。
 - 结构性隐患：`usePlannerStore` 水合时文件状态无条件优先于 localStorage，配合 POST 静默失败，服务空窗期的编辑会被静默回滚。建议后续：同步失败改为持续可见警示 + 服务恢复后自动补传；水合前对比新旧状态给出合并/选择提示。
+
+## 2026-08-28 数据抢救 + 离线同步韧性根治（用户确认后实施）
+
+**动机**：上节排查发现两类风险——① 浏览器里卡着 3 个未落盘的今日手动 blocks，刷新即丢；② “文件优先”水合 + POST 静默失败会让服务空窗期的编辑被静默回滚（甘特图顺延疑似即此遭遇）。用户确认后实施“follow your steps”。
+
+**Step 1 数据抢救**（改代码前必须先做，否则 src 编辑触发 Vite 热重载/整页刷新会丢数据）：
+- 从 Edge localStorage leveldb 重新提取最新态，与当前文件态精确 diff：除 3 个 blocks 外零差异 → 盲合并不存在冲突。
+- 备份 `plan-pilot-data-backup-20260828-rescue.tar.gz` → POST 浏览器态到 /api/data → 验证 blocks 8、mtime 更新。副本同步给坚果云客户端（运行中）。
+
+**Step 2 根治**（`fix/offline-sync-resilience` 分支）：
+1. `src/planner/hydration.js` 新增纯函数 `mergeOfflineEdits(fileData, localState)`：tasks/blocks/goals/reviews/recurring 按 id 取并集，同 id 冲突本地胜（触发前提是“上次保存失败”标志，此时文件侧同 id 必为编辑前旧值）；dayPlans 按日期并集；settings/ai 浅合并。合并产物需再过 hydrateState（周期派生块自愈）。
+2. `src/hooks/usePlannerStore.js`：
+   - 保存失败 → 置 localStorage 标志 `plan-pilot-pending-sync-v1` + 指数退避重试（1s→2s→…→30s 封顶），重试始终发送最新载荷（savePayloadRef），服务恢复后自动补传，成功后清标志与警示；
+   - 加载时若标志存在：不直接用文件覆盖，改为 `mergeOfflineEdits` 合并后 setState + 回传服务端，成功才清标志；失败则标志保留，下次加载继续补传。
+3. `src/App.jsx`：同步警告去掉“永久关闭”按钮，改为持续可见（服务恢复时随 syncIssue 清空自动消失）。
+
+**验证**：
+- 单测：mergeOfflineEdits 6 用例（并集/冲突本地胜/dayPlans/settings 浅合并/健壮性），npm test 133/133。
+- E2E（`.test-tmp/offline-recovery.cjs`，Playwright + /api/* 拦截，零文件污染）：场景 A（种子 pendingSync 标志 + 本地多一任务）→ 加载后两任务均在、回传 POST 含合并态、标志清除、无警告；场景 B（前两次 POST 500）→ 失败期间警示可见且标志置位、共 3 次尝试后成功、横幅消失标志清除。
+- 教训：E2E 时序断言要落在状态机的正确窗口（勾选后 2s 防抖才发第一次 POST，1.5s 时检查必然为空）；首次放在 3.5s 后通过。
+
+**遗留**：顺延变更本体需在当初操作的设备上找回（其它机器开 dev server 落盘，或手机原生壳——后者设计上只存 localStorage，不参与文件同步）。
 
 **其它**：dev server（5173）已于 10:12:43 以既定规范重启并验证（HTTP 200，/api/data 正常）；pull 确认远端无新提交。坚果云客户端今晨 09:09 重启过（08-27 02:12 起无活动日志），TLS 遥测报错不影响同步主链路。
 

@@ -5,6 +5,7 @@ import {
   expandRecurringBlocks,
   hydrateState,
   isRecurringDerivedBlock,
+  mergeOfflineEdits,
   replaceRecurringBlocks,
 } from "../src/planner/hydration.js";
 
@@ -114,4 +115,74 @@ test("replaceRecurringBlocks：保留手动块、丢弃旧派生块，并避免�
   assert.equal(blocks[0], manualBlock);
   assert.equal(isRecurringDerivedBlock(oldDerived), true);
   assert.equal(isRecurringDerivedBlock(manualBlock), false);
+});
+
+// —— mergeOfflineEdits：离线编辑合并（保存失败 → 下次加载回传） ——
+
+test("mergeOfflineEdits：两侧独有条目都保留（并集）", () => {
+  const file = { tasks: [{ id: "t1", title: "文件任务" }], blocks: [], goals: [], reviews: [], recurring: [] };
+  const local = { tasks: [{ id: "t2", title: "离线新建" }], blocks: [], goals: [], reviews: [], recurring: [] };
+  const merged = mergeOfflineEdits(file, local);
+  assert.deepEqual(merged.tasks.map((t) => t.id).sort(), ["t1", "t2"]);
+});
+
+test("mergeOfflineEdits：同 id 冲突本地胜（离线编辑是当前会话的主动操作）", () => {
+  const file = { tasks: [{ id: "t1", title: "文件旧标题", status: "open" }] };
+  const local = { tasks: [{ id: "t1", title: "本地新标题", status: "open" }] };
+  const merged = mergeOfflineEdits(file, local);
+  assert.equal(merged.tasks.length, 1);
+  assert.equal(merged.tasks[0].title, "本地新标题");
+});
+
+test("mergeOfflineEdits：blocks/goals/reviews/recurring 按 id 并集且本地胜", () => {
+  const file = {
+    blocks: [{ id: "b1", start: "09:00" }],
+    goals: [{ id: "g1", startDate: "2026-08-01" }],
+    reviews: [{ id: "r1" }],
+    recurring: [{ id: "rc1", title: "旧规则" }],
+  };
+  const local = {
+    blocks: [{ id: "b1", start: "10:00" }, { id: "b2", start: "14:00" }],
+    goals: [{ id: "g2", startDate: "2026-09-01" }],
+    reviews: [],
+    recurring: [{ id: "rc2", title: "新规则" }],
+  };
+  const merged = mergeOfflineEdits(file, local);
+  assert.equal(merged.blocks.length, 2); // b1 本地胜 + b2 新增
+  assert.equal(merged.blocks.find((b) => b.id === "b1").start, "10:00");
+  assert.equal(merged.goals.length, 2);
+  assert.equal(merged.reviews.length, 1);
+  assert.equal(merged.recurring.length, 2);
+});
+
+test("mergeOfflineEdits：dayPlans 按日期并集，同日期本地胜", () => {
+  const file = { dayPlans: { "2026-08-28": { energy: "低" }, "2026-08-29": { energy: "高" } } };
+  const local = { dayPlans: { "2026-08-28": { energy: "中" } } };
+  const merged = mergeOfflineEdits(file, local);
+  assert.deepEqual(Object.keys(merged.dayPlans).sort(), ["2026-08-28", "2026-08-29"]);
+  assert.equal(merged.dayPlans["2026-08-28"].energy, "中");
+  assert.equal(merged.dayPlans["2026-08-29"].energy, "高");
+});
+
+test("mergeOfflineEdits：settings/ai 浅合并，文件侧新增键保留、本地值覆盖", () => {
+  const file = { settings: { workSegments: [{ start: "09:00", end: "18:00" }], soundFx: true }, ai: { model: "old-model" } };
+  const local = { settings: { soundFx: false }, ai: { model: "new-model", provider: "deepseek" } };
+  const merged = mergeOfflineEdits(file, local);
+  assert.equal(merged.settings.soundFx, false); // 本地覆盖
+  assert.deepEqual(merged.settings.workSegments, [{ start: "09:00", end: "18:00" }]); // 文件键保留
+  assert.equal(merged.ai.model, "new-model");
+  assert.equal(merged.ai.provider, "deepseek");
+});
+
+test("mergeOfflineEdits：健壮性——任一侧为空/null 均安全", () => {
+  const local = { tasks: [{ id: "t1" }] };
+  assert.deepEqual(mergeOfflineEdits(null, local).tasks, [{ id: "t1" }]);
+  assert.deepEqual(mergeOfflineEdits(undefined, local).tasks, [{ id: "t1" }]);
+  const file = { tasks: [{ id: "t1", title: "x" }] };
+  const merged = mergeOfflineEdits(file, null);
+  assert.deepEqual(merged.tasks, [{ id: "t1", title: "x" }]);
+  assert.deepEqual(merged.blocks, []);
+  const empty = mergeOfflineEdits({}, {});
+  assert.deepEqual(empty.tasks, []);
+  assert.deepEqual(empty.dayPlans, {});
 });
