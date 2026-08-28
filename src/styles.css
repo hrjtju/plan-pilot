@@ -1486,6 +1486,12 @@ button.topbar-highlight:hover {
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--surface);
+  /* 面板定高（驾驶舱一屏布局）且本区条目多时：min-height:0 + overflow-y
+     让本区成为可收缩的弹性项、内部滚动，而不是把下方时间轴挤出面板盒子。
+     min-height 下限防止被 flex 压缩成不可读的细条；超出部分由面板整体滚动。
+     滚动条 hit-testing 被本区边界包住，不影响时间轴内的拖拽/点击。 */
+  min-height: 150px;
+  overflow-y: auto;
 }
 
 .schedule-preview {
@@ -2829,7 +2835,9 @@ textarea:focus-visible {
   min-height: 0;
 }
 .cockpit-grid > .stats-row { grid-column: 1 / -1; grid-row: 1; }
-.cockpit-grid > .schedule-panel { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; min-height: 0; }
+/* overflow-y:auto 兜底：极端小窗口下各子项 min-content 之和仍可能超过面板定高，
+   此时在面板盒内滚动，而不是让时间轴溢出到面板边框之外。 */
+.cockpit-grid > .schedule-panel { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
 .cockpit-grid > .task-panel { grid-column: 2; grid-row: 2; }
 @media (max-width: 1100px) {
   .cockpit-grid { grid-template-columns: 1fr; max-width: 720px; }

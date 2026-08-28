@@ -22,3 +22,4 @@ scripts/
 .playwright-mcp/
 test-results/
 .DS_Store
+.test-tmp/

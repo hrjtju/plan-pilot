@@ -2,6 +2,27 @@
 
 > 约定：每次功能性改动在此追加一节，写清动机、实现、验证与遇到的问题。
 
+## 2026-08-28 修复：排程 questions 弹窗把时间轴挤出面板（CSS-only）
+
+**动机**：自动排程后有任务当天排不下时，会在时间分配面板内弹出若干条目（“需要你判断放在哪里”，可选今日/延期）。条目多时该弹窗把下方 `.day-timeline` 顶出 `.schedule-panel` 盒子外（用户报告“timeline below out of the box”）。实测 1440×900 视口、3 条 questions 时溢出 **524.5px**。
+
+**根因**：驾驶舱一屏布局下 `.app-shell(100vh,overflow:hidden)` → `.workspace` → `.view-enter(flex:1,min-height:0)` → `.today-wrap(flex:1)` → `.cockpit-grid(flex:1)` 整条链定高；`.schedule-panel` 作为 grid item 一直带 `min-height:0`，其对行高的 min-content 贡献为 0，行高由视口剩余空间决定（约 363px）而非内容高度。面板内各 flex 子项中：`.schedule-questions` 默认 `min-height:min-content`（拒绝收缩），`.day-timeline` 有 `min-height:300px` 下限；questions 出现后子项总高超出行高，而面板 `overflow-y:visible`，溢出直接可见——时间轴整段挂在面板边框外。
+
+**实现**（`src/styles.css`，2 处，无 JSX 改动）：
+1. `.schedule-questions` 加 `min-height:150px; overflow-y:auto`：成为可收缩的弹性项，空间不足时内部滚动而不是顶走时间轴；150px 下限防止被 flex 压瘪成不可读细条（首版无下限被压到 26px）。滚动条 hit-testing 被本区边界包住，不影响时间轴拖拽/点击。
+2. `.cockpit-grid > .schedule-panel` 加 `overflow-y:auto` 兑底：极端小窗口下各子项下限之和仍超面板定高时，在面板盒内整体滚动，结构性保证内容永不渲染到盒子外（滚动容器必然裁剪）。
+
+**验证**（Playwright（Windows 侧全局 playwright@1.61.1 + chromium）驱动真浏览器，脚本在 `.test-tmp/`（已 gitignore）：`repro.cjs` 复现、`verify.cjs` 双视口断言、`mobile.cjs` 移动端抽查）：
+- 数据隔离：拦截全部 `/api/*` 请求（GET /api/data 返空对象、所有 POST 吞掉），文件后端零写入，状态只存浏览器 localStorage；另起 5174 端口独立 dev server，不动用户 5173/数据。
+- 种子：`ai.enabled=false`（规则排程不依赖外部 AI），工作时段 09:00–10:00（60min），明天 3 个 120min 任务 → 必然 3 条 questions。
+- 修复前：时间轴 bottom 超面板 bottom 524.5px（1440×900）。修复后：两视口（1440×900 / 1366×768）面板 overflowY=auto、questions clientH 148≥140、时间轴保持 300px 下限、延期流程（选择器打开→改日期→确认后条目 3→2 且任务日期变更）与“今日”空间不足提示路径全部通过、无 console error；移动端 390×844（display:block 布局）questions 自然高度完整可见、交互正常。`npm test` 127/127 通过。
+
+**问题记录**：
+- 度量陷阱：滚动容器内元素的 `getBoundingClientRect()` 返回布局位置而非可视位置，首版用 “timeline.bottom − panel.bottom ≤ 0” 当断言在修复后仍报 139.7px“溢出”，实为假阳性；对 overflow 滚动容器应断言 computed overflowY=auto（裁剪成立）+ clientH/scrollH 关系，而非 rect 差值。
+- kimi-webbridge skill 在本机 skills 目录不存在（任务提示可用），改用 webapp-testing skill（Playwright）完成调查。
+- 环境踩坑：WSL→Windows 传环境变量需 WSLENV（NODE_PATH 直接 export 无效，改用 require 绝对路径）；WSL 后台起的 Windows 进程随 shell 退出被杀，dev server 需与验证脚本同命令内启动。
+- 既有小瑕疵（不在本次范围）：健康状态（无 questions）面板内容也比行高超出约 19px（子项 min-content 和 ≈424 > 行高 405），修复前溢出 1.6–7.8px 不可见，修复后表现为面板内部轻微滚动，可接受。
+
 ## 2026-08-27 22:50 重新部署 dev server（保留用户数据）
 
 **操作**：杀掉旧 Vite dev server（Windows 侧 PID 12296→54872→30628→37584 进程树，`taskkill /T /F`），以 startup.bat 同等方式重启（分离的 `cmd /c "npm run dev"`、cwd 锁定项目根、日志追加到 `dev-server.log` / `dev-server.err.log`）。新实例 Vite v6.4.2，PID 27204，802ms 就绪，HTTP 200。
