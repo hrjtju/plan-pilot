@@ -22,6 +22,15 @@
 - kimi-webbridge skill 在本机 skills 目录不存在（任务提示可用），改用 webapp-testing skill（Playwright）完成调查。
 - 环境踩坑：WSL→Windows 传环境变量需 WSLENV（NODE_PATH 直接 export 无效，改用 require 绝对路径）；WSL 后台起的 Windows 进程随 shell 退出被杀，dev server 需与验证脚本同命令内启动。
 - 既有小瑕疵（不在本次范围）：健康状态（无 questions）面板内容也比行高超出约 19px（子项 min-content 和 ≈424 > 行高 405），修复前溢出 1.6–7.8px 不可见，修复后表现为面板内部轻微滚动，可接受。
+## 2026-08-28 00:22 重启 dev server 实例
+
+**动机**：5173 端口空置，dev server 未在运行（上一实例此前被 Ctrl+C 终止，`dev-server.err.log` 残留 `^C^C`），用户要求启动实例。
+
+**操作**：PowerShell `Start-Process` 分离 `cmd /c "npm run dev >> dev-server.log 2>> dev-server.err.log"`，`-WorkingDirectory` 锁定项目根（沿用 2026-08-27 22:50 节的规范，规避 `DATA_DIR` 相对 cwd 解析陷阱），窗口最小化，日志追加。Vite v6.4.2，782ms 就绪。
+
+**验证**：TCP 轮询第 1 次即通；根路径 HTTP 200；`GET /api/data` 200，goals=11 / tasks=6 / dayPlans=10 / recurring=3，与 `data/` 目录内容一致。
+
+**教训**：验证脚本首跑按 `state.goals` 层级取数得到 0，差点误判数据丢失——实际 `/api/data` 响应是顶层平铺（settings/goals/tasks/…），并无 `state` 包装。写验证断言前应先看响应的真实结构，而不是按上次记忆猜层级。
 
 ## 2026-08-27 22:50 重新部署 dev server（保留用户数据）
 
