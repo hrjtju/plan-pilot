@@ -95,3 +95,9 @@ AI 代理支持两种协议：
 ## 语言
 
 UI 文案为简体中文。AI prompt 中系统指令为英文（避免模型输出语言偏移），用户上下文为中文。
+
+## 反馈机制
+
+- 用户显式纠正/偏好 → 用 workflow-feedback 记录到 docs/agent-feedback/；
+- 按需运行 workflow-improver（"跑一下 improver"）整理提案，合入必须经用户批准；
+- 实验数字类反馈写 docs/worklog.md，不进 feedback 库。
