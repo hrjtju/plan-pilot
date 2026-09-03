@@ -79,6 +79,10 @@ AI 代理支持两种协议：
 4. 在工作时间和不可用时间块之间的空闲区间中，按优先级填充任务
 5. 无法安排的任务返回为 `questions`（需用户手动决定）
 
+排期不变式（代码已实现于 scheduling.js）：
+- 不得排入任何早于当前时间的块（`notBefore` 检查）；
+- 固定时间任务若已过时，作为 `questions` 返回（"固定时间 X 已过，请确认是否顺延"），不静默调整。
+
 ### AI 集成
 
 三个 AI 功能入口均在 App.jsx 中：
@@ -101,3 +105,12 @@ UI 文案为简体中文。AI prompt 中系统指令为英文（避免模型输�
 - 用户显式纠正/偏好 → 用 workflow-feedback 记录到 docs/agent-feedback/；
 - 按需运行 workflow-improver（"跑一下 improver"）整理提案，合入必须经用户批准；
 - 实验数字类反馈写 docs/worklog.md，不进 feedback 库。
+
+## 代码审查纪律
+
+- 审查结论需覆盖：逻辑正确性、跨模块调用、边界场景；
+- 声称"未发现 bug"必须给出所检查的范围与证据，不输出空结论。
+
+## Windows 命令注意
+
+- git fetch/pull/checkout 等写 .git 的操作被沙箱拦截属预期，直接请求授权，不先失败一次。
