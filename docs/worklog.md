@@ -2,6 +2,42 @@
 
 > 约定：每次功能性改动在此追加一节，写清动机、实现、验证与遇到的问题。
 
+## 2026-10-11 双远端同步：origin 沙箱规则文档合入 + upstream 状态核查（含 WSL push 凭据踩坑）
+
+**触发**：用户要求「检查远端的更新」，随后授权「合并两个远端（有冲突则保留更先进的实现）」「全部是」（写记录 + 推送）。
+
+**1. 检查（fetch 后全远端仅两处变化）**
+- `origin/master`：`297540a → f2f377e`（fast-forward，hjtju，2026-08-28 16:50）`docs: 沙箱环境行为规则与代理误报 502 事故记录`——`CLAUDE.md` +10 行（新增「沙箱环境注意」小节）、`docs/worklog.md` +14 行（10:15 沙箱代理误报 502 复盘）。
+- `upstream`：新增分支 `feat/omnibar`（tip `5aaefc6`，YangYu-NUAA，2026-09-21），分叉点 `36eb139`(#37)。
+- 无新 tag（本仓库无 tag）；其余远端分支本次无变化。
+
+**2. 位置关系（合并前）**
+- 本地 `master` 与 `origin/master` 已分叉：本地 4 ahead（`8e4d7a9`/`052d658`/`16f5414`/`a1ca625`，agent-feedback 基建 + improver 应用），origin 1 ahead（`f2f377e`）。
+- `upstream/master`（`5ed10dd` #40）已是本地 master 祖先 → 上游主分支无独有内容。
+- 合并预演 `git merge-tree --write-tree master origin/master` 退出码 0（无冲突），与实测一致。
+
+**3. 合并（未触发文本冲突）**
+- `git merge origin/master`：`ort` 策略 `Auto-merging CLAUDE.md`（两侧改动位于文件不同区域：沙箱节在 ~20 行，反馈机制/审查纪律/Windows 节在尾部），生成合并提交 `faec02b`（parents `a1ca625`, `f2f377e`）。
+- `git merge upstream/master`：`Already up to date.`
+
+**4. 语义分歧判定（无冲突，但确有两套实现；按「保留更先进」取 master）**
+- 上游 `5aaefc6`：`commandParse` 加 `weak` 标记——无日期/时间/时长的裸文本转 AI，强 `add-task` 仍本地执行（另加 4 条断言）。
+- master：`src/components/OmniBar.jsx` 的 `strong = intents.find(i => i.kind !== "add-task")`——**任何** `add-task` 都进 AI 访谈，仅排块/跳日期/命令直接执行。该规则来自上游更晚的 `be4b59f fix(omnibar): 路由收紧`（随 #39 squash `990e587` 入 master）；`5aaefc6` 基于 8/1 旧基线重写、不含该收紧，master 的 OmniBar 另多 `coachScope/onStartInterview/onScopeChange` 能力。
+- 结论：保留 master；`weak` 在 master 路由下为死代码，`upstream/feat/omnibar` 不并入。佐证：`git diff 990e587 upstream/refactor/omnibar -- src/` 为空（上游 omnibar 主线 src 已全在 master）。
+
+**5. 验证**
+- `git diff --stat origin/master master` = 4 文件 **+154 / -0**（agent-feedback 三文件 + CLAUDE.md 新增节）→ origin 侧内容零丢失。
+- `git diff --stat 297540a master -- src/ vite.config.js package.json test/` 为空 → 本次合并为纯文档变更。
+- 冲突标记 `grep '<<<<<<<'` 无命中；`npm test` **133 pass / 0 fail**（118ms）。
+- 合并后 `CLAUDE.md` 四节俱全：沙箱环境注意（20 行）、反馈机制（113）、代码审查纪律（119）、Windows 命令注意（124）。
+
+**6. 推送踩坑（新记录，值得固化）**
+- WSL 侧 `git push origin master` 无输出挂死（180s 超时）；关掉交互后复现真实报错：`GIT_TERMINAL_PROMPT=0 git push` → `remote: No anonymous write access.` / `fatal: Authentication failed`。
+- **根因**：WSL 侧 git 未配置任何 `credential.helper`（global/system 均空），https push 只能靠终端交互索要账号 → 无 TTY 即挂死。**注意这并非「沙箱拦截写 .git」**：同环境同会话的 `git fetch` / `merge` / `ls-remote` 全部正常。
+- **解法（沿用既有实践）**：经 Windows git 推送（`credential.helper=manager`，系统配置 `C:/3_apps/git/Git/etc/gitconfig`）：`powershell.exe -NoProfile -Command 'Set-Location C:\Users\Ivy\1_projects\plan-pilot; git push origin master'` → `f2f377e..faec02b master -> master` 成功。PowerShell 会把 git 的 stderr 进度渲染成 `NativeCommandError` 红字，属噪音，不代表失败。
+- **待办**：`CLAUDE.md`「Windows 命令注意」现文（“git fetch/pull/checkout 等写 .git 的操作被沙箱拦截属预期”）与实测不符，已向用户提议改写为 push 凭据问题（待确认后改）。
+- 最终状态：本地与 `origin/master` 同为 `faec02b`（本 worklog 记录为随后的文档提交，同批推送）。
+
 ## 2026-08-28 排查：甘特图顺延未同步到坚果云（含 dev server 重启验证）
 
 **现象**：用户报告在甘特图上做的顺延变更未同步到坚果云。排查后按用户确认实施了：卡留数据抢救 + 离线同步韧性根治（详见下一节）。
