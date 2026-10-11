@@ -33,9 +33,10 @@
 
 **6. 推送踩坑（新记录，值得固化）**
 - WSL 侧 `git push origin master` 无输出挂死（180s 超时）；关掉交互后复现真实报错：`GIT_TERMINAL_PROMPT=0 git push` → `remote: No anonymous write access.` / `fatal: Authentication failed`。
-- **根因**：WSL 侧 git 未配置任何 `credential.helper`（global/system 均空），https push 只能靠终端交互索要账号 → 无 TTY 即挂死。**注意这并非「沙箱拦截写 .git」**：同环境同会话的 `git fetch` / `merge` / `ls-remote` 全部正常。
+- **根因**：WSL 侧 git 未配置任何 `credential.helper`（global/system 均空），https push 只能靠终端交互索要账号 → 无 TTY 即挂死。**这不是「沙箱拦截写 .git」**：同环境同会话的 `git fetch` / `merge` / `commit` / `ls-remote` 全部正常。
+- **环境核对（重要，避免误推结论）**：`env | grep -i proxy` 显示本会话 `http_proxy=http://127.0.0.1:7897`、`no_proxy` 含 `127.*/localhost`（亦非 `landstrip@127.0.0.1:63063`）→ **本次不在 landstrip 沙箱内**。故「沙箱拦截 .git 写入」的旧结论与「WSL push 缺凭据挂死」的新结论各自在自己的环境成立，互不否定。
 - **解法（沿用既有实践）**：经 Windows git 推送（`credential.helper=manager`，系统配置 `C:/3_apps/git/Git/etc/gitconfig`）：`powershell.exe -NoProfile -Command 'Set-Location C:\Users\Ivy\1_projects\plan-pilot; git push origin master'` → `f2f377e..faec02b master -> master` 成功。PowerShell 会把 git 的 stderr 进度渲染成 `NativeCommandError` 红字，属噪音，不代表失败。
-- **待办**：`CLAUDE.md`「Windows 命令注意」现文（“git fetch/pull/checkout 等写 .git 的操作被沙箱拦截属预期”）与实测不符，已向用户提议改写为 push 凭据问题（待确认后改）。
+- **待办**：`CLAUDE.md`「Windows 命令注意」仅覆盖 landstrip 沙箱场景；建议**追加**（不删改原句）一条非沙箱会话的说明——「WSL 直连下 git 写操作正常，但 push 会因缺 `credential.helper` 挂死，改走 Windows git」。已报用户，待确认。
 - 最终状态：本地与 `origin/master` 同为 `faec02b`（本 worklog 记录为随后的文档提交，同批推送）。
 
 ## 2026-08-28 排查：甘特图顺延未同步到坚果云（含 dev server 重启验证）
